@@ -28,9 +28,12 @@ final class PortalViewModel: ObservableObject {
     private var frameTimestamps: [CFTimeInterval] = []
 
     init() {
+        Diagnostics.startRun()
         do {
             renderer = try PortalRenderer()
+            Diagnostics.log("renderer created")
         } catch {
+            Diagnostics.log("renderer FAILED: \(error.localizedDescription)")
             loadState = .failed(error.localizedDescription)
         }
     }
@@ -47,14 +50,17 @@ final class PortalViewModel: ObservableObject {
         configuration.planeDetection = []
         configuration.environmentTexturing = .none
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        Diagnostics.log("AR session running")
 
         renderer.config = config
 
         Task {
             do {
                 try await renderer.loadSplats(resource: "chop_suey", extension: "spz")
+                Diagnostics.log("splats ready: \(renderer.splatCount)")
                 loadState = .ready(splatCount: renderer.splatCount)
             } catch {
+                Diagnostics.log("splat load FAILED: \(error.localizedDescription)")
                 loadState = .failed(error.localizedDescription)
             }
         }

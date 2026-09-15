@@ -11,6 +11,11 @@ packages:
   # offline and pins us to a known-good tree.
   MetalSplatter:
     path: ../vendor-metalsplatter
+  # Already in the graph via MetalSplatter, declared here so the SPZ decoder can
+  # be used directly instead of through SplatIO's memory-hungry reader.
+  spz-swift:
+    url: https://github.com/scier/spz-swift.git
+    from: 2.1.0
 
 targets:
   ParallaxWindow:
@@ -25,6 +30,8 @@ targets:
         product: MetalSplatter
       - package: MetalSplatter
         product: SplatIO
+      - package: spz-swift
+        product: spz
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kaifengwu.parallaxwindow

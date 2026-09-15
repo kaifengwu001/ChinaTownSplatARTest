@@ -36,6 +36,8 @@ final class PortalRenderer {
 
     private static let colorFormat: MTLPixelFormat = .bgra8Unorm
 
+    private static let loadQueue = DispatchQueue(label: "splat-load", qos: .userInitiated)
+
     let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let cameraPipeline: MTLRenderPipelineState
@@ -54,6 +56,10 @@ final class PortalRenderer {
     private(set) var splatCount: Int = 0
 
     private var cameraUVs = [SIMD2<Float>](repeating: .zero, count: 4)
+
+    /// Startup milestones are logged once each, not every frame.
+    private var loggedFirstFrame = false
+    private var loggedFirstSplatFrame = false
 
     init() throws {
         guard let device = MTLCreateSystemDefaultDevice(),
@@ -119,11 +125,27 @@ final class PortalRenderer {
             maxViewCount: 1,
             maxSimultaneousRenders: 3)
 
-        let points = try await AutodetectSceneReader(url).readAll()
-        let chunk = try SplatChunk(device: device, from: points)
-        await renderer.addChunk(chunk)
+        // Decoding is a synchronous million-iteration loop. The caller is on the
+        // main actor, so hop to a background queue explicitly rather than
+        // relying on where a nonisolated async function happens to run.
+        let device = self.device
+        let loaded: SplatAssetLoader.Result = try await withCheckedThrowingContinuation {
+            continuation in
+            Self.loadQueue.async {
+                do {
+                    continuation.resume(
+                        returning: try SplatAssetLoader.loadSPZ(url: url, device: device))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
 
-        splatCount = points.count
+        Diagnostics.log("adding chunk to renderer")
+        await renderer.addChunk(loaded.chunk)
+        Diagnostics.log("chunk added")
+
+        splatCount = loaded.splatCount
         splatRenderer = renderer
     }
 
@@ -136,6 +158,7 @@ final class PortalRenderer {
         let forward = MatrixMath.horizontalForward(of: camera.transform)
         windowAnchor = MatrixMath.uprightFrame(
             position: eye + forward * config.windowDistance, forward: forward)
+        Diagnostics.log("window placed at \(eye + forward * config.windowDistance)")
     }
 
     func clearWindow() {
@@ -148,6 +171,11 @@ final class PortalRenderer {
         guard let drawable = view.currentDrawable,
               let commandBuffer = commandQueue.makeCommandBuffer()
         else { return }
+
+        if !loggedFirstFrame {
+            loggedFirstFrame = true
+            Diagnostics.log("first frame drawn at \(Int(viewportSize.width))x\(Int(viewportSize.height))")
+        }
 
         updateCameraUVs(frame: frame, viewportSize: viewportSize)
 
@@ -183,6 +211,11 @@ final class PortalRenderer {
                     rasterizationRateMap: nil,
                     renderTargetArrayLength: 0,
                     to: commandBuffer)
+
+                if !loggedFirstSplatFrame {
+                    loggedFirstSplatFrame = true
+                    Diagnostics.log("first splat pass encoded (rendered=\(splatsReady))")
+                }
             } catch {
                 // A dropped splat frame should still show camera passthrough
                 // rather than stalling the whole session.
