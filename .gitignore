@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+output/
+public/*.sog
+vendor-ml-sharp/
+ios/ParallaxWindow.xcodeproj/
+ios/*.xcworkspace/
+vendor-metalsplatter/
+ios/Resources/*.spz
