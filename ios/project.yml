@@ -1,0 +1,42 @@
+name: ParallaxWindow
+
+options:
+  bundleIdPrefix: com.kaifengwu
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+packages:
+  # Local checkout rather than a remote version requirement: keeps the build
+  # offline and pins us to a known-good tree.
+  MetalSplatter:
+    path: ../vendor-metalsplatter
+
+targets:
+  ParallaxWindow:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        buildPhase: resources
+    dependencies:
+      - package: MetalSplatter
+        product: MetalSplatter
+      - package: MetalSplatter
+        product: SplatIO
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaifengwu.parallaxwindow
+        INFOPLIST_FILE: Info.plist
+        # Swift 5 language mode: MetalSplatter's renderer is a lock-based class
+        # rather than an actor, and strict concurrency checking adds no value to
+        # a single-threaded render loop.
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        # Read from the Apple Development certificate in the login keychain.
+        DEVELOPMENT_TEAM: W23Y365YR7
+        # Splats are heavy; Debug builds of the loader are more than an order of
+        # magnitude slower, so keep optimisation on even in Debug.
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
