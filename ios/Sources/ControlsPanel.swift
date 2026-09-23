@@ -7,7 +7,7 @@ struct ControlsPanel: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            slider("window width", value: $config.windowWidth, in: 0.4...4, unit: "m")
+            slider("window width", value: $config.windowWidth, in: 0.1...4, unit: "m")
             slider("window height", value: $config.windowHeight, in: 0.2...4, unit: "m")
             slider("window distance", value: $config.windowDistance, in: 1...8, unit: "m")
             slider("scene push-back", value: $config.sceneOffsetZ, in: 0...12, unit: "m")

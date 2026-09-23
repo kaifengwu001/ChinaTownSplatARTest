@@ -5,24 +5,24 @@ import simd
 /// Defaults were tuned by eye in the desktop preview. Treated as a value type:
 /// the UI replaces the whole struct rather than mutating shared state.
 struct SceneConfig: Equatable {
-    /// Aperture size in metres. Square, which spans street to rooflines and is
-    /// why no pitch correction is needed.
-    var windowWidth: Float = 1.7
-    var windowHeight: Float = 1.7
+    /// Aperture size in metres. A portrait phone camera sees only ~35 degrees
+    /// horizontally, so the window must fit well inside that at its distance.
+    var windowWidth: Float = 0.4
+    var windowHeight: Float = 0.4
 
     /// How far in front of the viewer the window is planted.
-    var windowDistance: Float = 2.4
+    var windowDistance: Float = 1.28
 
     /// How far the scene sits behind the original capture point. SHARP's nearest
     /// content is ~1.5m from the capture point, so this must exceed
     /// `windowDistance` minus that, or the scene pokes through the aperture.
-    var sceneOffsetZ: Float = 2.5
-    var sceneOffsetY: Float = -0.05
-    var sceneScale: Float = 1.15
+    var sceneOffsetZ: Float = 1.12
+    var sceneOffsetY: Float = -1.4
+    var sceneScale: Float = 0.99
 
     /// Re-aims the window at a different band of the photo by rotating about the
-    /// capture point. Zero for a square aperture.
-    var scenePitchDeg: Float = 0.0
+    /// capture point.
+    var scenePitchDeg: Float = 11.56
 
     /// Transform from SHARP splat space into world space.
     ///

@@ -6,24 +6,23 @@
 export const DEFAULTS = Object.freeze({
   mode: "window", // "window" | "free"
 
-  // Physical window (metres). Tuned by eye in the preview: a square aperture
-  // slightly closer than the original 2x1m @ 3m target. The taller window
-  // captures street and buildings together, which is why pitch is now 0.
-  windowWidth: 1.7,
-  windowHeight: 1.7,
-  windowDistance: 2.4,
+  // Physical window (metres). Tuned by eye for AR: a portrait phone camera
+  // sees only ~35 deg horizontally, so the window must be small and close
+  // enough to sit inside the view with room around it.
+  windowWidth: 0.4,
+  windowHeight: 0.4,
+  windowDistance: 1.28,
 
   // Placement of the SHARP scene behind the window plane.
   // SHARP's nearest content sits ~1.5m from the original camera, so it must be
   // pushed back far enough to clear the window or it pokes through the frame.
-  sceneOffsetZ: 2.5,
-  sceneScale: 1.15,
+  sceneOffsetZ: 1.12,
+  sceneScale: 0.99,
 
   // Vertical framing. Pitch re-aims the window at a different band of the photo
-  // by rotating about the capture point. The square aperture already spans
-  // street to rooflines, so no aiming is needed.
-  scenePitchDeg: 0.0,
-  sceneOffsetY: -0.05,
+  // by rotating about the capture point.
+  scenePitchDeg: 11.56,
+  sceneOffsetY: -1.4,
 
   // Viewer motion. SHARP's usable baseline is ~0.5m absolute.
   eyeOffsetX: 0.0,

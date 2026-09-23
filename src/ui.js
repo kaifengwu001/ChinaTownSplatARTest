@@ -1,7 +1,7 @@
 import { DEFAULTS, update } from "./config.js";
 
 const SLIDERS = [
-  { key: "windowWidth", label: "window width", min: 0.4, max: 4, step: 0.05, unit: "m" },
+  { key: "windowWidth", label: "window width", min: 0.1, max: 4, step: 0.05, unit: "m" },
   { key: "windowHeight", label: "window height", min: 0.2, max: 3, step: 0.05, unit: "m" },
   { key: "windowDistance", label: "window distance", min: 1, max: 8, step: 0.05, unit: "m" },
   { key: "sceneOffsetZ", label: "scene push-back", min: 0, max: 12, step: 0.1, unit: "m" },
