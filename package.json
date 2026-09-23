@@ -3,11 +3,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5174"
+    "xr:copy": "node scripts/copy_xr_engine.mjs",
+    "predev": "npm run xr:copy",
+    "dev": "vite",
+    "prebuild": "npm run xr:copy",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
+    "@8thwall/engine-binary": "^1.0.0",
     "@sparkjsdev/spark": "^2.2.0",
     "three": "^0.186.0",
     "vite": "^8.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0"
   }
 }

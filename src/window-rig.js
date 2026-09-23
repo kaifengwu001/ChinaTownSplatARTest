@@ -10,11 +10,18 @@ const MATTE_EXTENT = 30; // metres; large enough to fill the view at any angle
  * This is deliberately the same technique as the iOS fallback path (an occluder
  * with one open face), so what we tune here transfers directly even if
  * RealityKit turns out not to clip Gaussian splats.
+ *
+ * With `occluder: true` the matte writes depth but no color, so in AR the
+ * camera feed shows through it while splats outside the aperture still fail
+ * the depth test. That works only because every splat sits behind the window
+ * plane: any sight line to a splat crosses the matte unless it passes through
+ * the hole.
  */
-export function createMatte() {
+export function createMatte({ occluder = false } = {}) {
   const material = new THREE.MeshBasicMaterial({
     color: 0x000000,
     side: THREE.DoubleSide,
+    colorWrite: !occluder,
   });
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
   mesh.renderOrder = -1;

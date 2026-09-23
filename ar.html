@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Parallax Window (WebAR)</title>
+    <link rel="stylesheet" href="/src/ar/ar.css" />
+    <!-- 8th Wall engine binary (closed source, limited-use license; see
+         /external/xr/LICENSE). `slam` preloads the world tracking chunk. -->
+    <script src="/external/xr/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+  </head>
+  <body>
+    <canvas id="camerafeed"></canvas>
+    <div id="hud"></div>
+    <div id="prompt"></div>
+    <div id="controls">
+      <button id="start" type="button">Start AR</button>
+      <button id="reset" type="button" hidden>Reset window</button>
+    </div>
+    <div id="credit">AR engine © 2026 Niantic Spatial, Inc. · <a href="/external/xr/LICENSE">license</a></div>
+    <script type="module" src="/src/ar/main.js"></script>
+  </body>
+</html>

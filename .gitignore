@@ -7,3 +7,5 @@ ios/ParallaxWindow.xcodeproj/
 ios/*.xcworkspace/
 vendor-metalsplatter/
 ios/Resources/*.spz
+public/external/
+dist/
