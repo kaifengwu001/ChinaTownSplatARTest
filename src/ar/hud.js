@@ -3,7 +3,15 @@
  * everything worth knowing, including errors, has to be visible here.
  */
 export function createHud(hudEl, promptEl) {
-  let fields = Object.freeze({ asset: "", splats: null, tracking: "starting", placed: false, headroom: 0, fps: 0 });
+  let fields = Object.freeze({
+    asset: "",
+    splats: null,
+    tracking: "starting",
+    placed: false,
+    headroom: 0,
+    fps: 0,
+    view: "…",
+  });
   let frames = [];
   let lastPaint = 0;
 
@@ -14,6 +22,7 @@ export function createHud(hudEl, promptEl) {
       `fps      ${fields.fps.toFixed(0)}`,
       `tracking ${fields.tracking}`,
       `headroom ${fields.headroom.toFixed(1)}°`,
+      `view     ${fields.view}`,
     ].join("\n");
   };
 

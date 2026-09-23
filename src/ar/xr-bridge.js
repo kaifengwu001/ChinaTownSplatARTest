@@ -19,11 +19,15 @@ const FAR = 1000;
  * `onReady` receives `{ renderer, scene, camera }` once the GL context exists.
  * `onTracking` receives `{ status, reason }` whenever either changes.
  * `onRendered` is called after each frame is drawn.
+ * `onView` receives `{ width, height, cssWidth, cssHeight, aspectError }` when
+ * the render size or projection changes; `aspectError` is the ratio of the
+ * projection's aspect to the buffer's, and anything but 1 means stretching.
  */
-export function createThreeBridge({ onReady, onTracking, onRendered = () => {} }) {
-  const state = { renderer: null, scene: null, camera: null, status: "", reason: "" };
+export function createThreeBridge({ onReady, onTracking, onRendered = () => {}, onView = () => {} }) {
+  const state = { renderer: null, scene: null, camera: null, status: "", reason: "", size: "", view: "" };
 
   const syncProjection = (width, height) => {
+    state.size = `${width}x${height}`;
     state.renderer.setSize(width, height, false);
     window.XR8.XrController.updateCameraProjectionMatrix({
       origin: state.camera.position,
@@ -45,6 +49,29 @@ export function createThreeBridge({ onReady, onTracking, onRendered = () => {} }
     state.status = trackingStatus;
     state.reason = trackingReason;
     onTracking({ status: trackingStatus, reason: trackingReason });
+  };
+
+  // The canvas buffer can be resized by us, by 8th Wall, or by Safari's toolbar
+  // showing and hiding. three.js keeps its own viewport size, so any drift
+  // between it and the buffer renders a stretched image.
+  const followCanvas = (canvas) => {
+    if (`${canvas.width}x${canvas.height}` !== state.size) syncProjection(canvas.width, canvas.height);
+  };
+
+  const reportView = (canvas) => {
+    const p = state.camera.projectionMatrix.elements;
+    const aspectError = p[0] !== 0 ? p[5] / p[0] / (canvas.width / canvas.height) : 0;
+    const view = {
+      width: canvas.width,
+      height: canvas.height,
+      cssWidth: canvas.clientWidth,
+      cssHeight: canvas.clientHeight,
+      aspectError,
+    };
+    const key = JSON.stringify({ ...view, aspectError: aspectError.toFixed(3) });
+    if (key === state.view) return;
+    state.view = key;
+    onView(view);
   };
 
   return {
@@ -86,6 +113,8 @@ export function createThreeBridge({ onReady, onTracking, onRendered = () => {} }
       // 8th Wall has just drawn the camera feed with its own GL state; three's
       // cached state is stale, and the colour buffer must be kept.
       renderer.resetState();
+      followCanvas(renderer.domElement);
+      reportView(renderer.domElement);
       renderer.clearDepth();
       renderer.render(scene, camera);
       onRendered();

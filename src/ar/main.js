@@ -30,9 +30,16 @@ function waitForXR8() {
   return new Promise((resolve) => window.addEventListener("xrloaded", () => resolve(window.XR8), { once: true }));
 }
 
+// The buffer must match the canvas's laid-out size exactly, or the browser
+// scales the image to fit and everything comes out stretched.
 function sizeCanvas(canvas, dpr) {
-  canvas.width = Math.round(window.innerWidth * dpr);
-  canvas.height = Math.round(window.innerHeight * dpr);
+  const { width, height } = canvas.getBoundingClientRect();
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+}
+
+function formatView({ width, height, cssWidth, cssHeight, aspectError }) {
+  return `${width}×${height} on ${cssWidth}×${cssHeight}, aspect ×${aspectError.toFixed(3)}`;
 }
 
 async function main() {
@@ -91,13 +98,17 @@ async function main() {
       if (!anchor.visible) hud.prompt(trackingPrompt(next, false));
     },
     onRendered: () => hud.tick(performance.now()),
+    onView: (view) => hud.set({ view: formatView(view) }),
   });
+
+  sizeCanvas(canvas, options.dpr);
+  new ResizeObserver(() => sizeCanvas(canvas, options.dpr)).observe(canvas);
 
   startButton.addEventListener("click", async () => {
     startButton.disabled = true;
     hud.prompt("Starting camera…");
     try {
-      await startXR(canvas, options, bridge, hud);
+      await startXR(canvas, bridge, hud);
       startButton.hidden = true;
     } catch (err) {
       startButton.disabled = false;
@@ -111,11 +122,8 @@ async function main() {
   });
 }
 
-async function startXR(canvas, options, bridge, hud) {
+async function startXR(canvas, bridge, hud) {
   const XR8 = await waitForXR8();
-
-  sizeCanvas(canvas, options.dpr);
-  window.addEventListener("resize", () => sizeCanvas(canvas, options.dpr));
 
   // Metric scale is essential: the window is meant to be 1.7m, not "1.7 units
   // of whatever the first frame's baseline happened to be".

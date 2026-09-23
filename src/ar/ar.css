@@ -14,8 +14,10 @@ body {
 #camerafeed {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  /* Not 100vh: on iOS Safari that is the toolbar-hidden height, taller than
+     what is visible, which stretches the render vertically. */
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
