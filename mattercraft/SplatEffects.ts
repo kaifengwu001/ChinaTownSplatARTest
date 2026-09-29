@@ -57,7 +57,7 @@ export class SplatEffects extends Group {
    */
   public bandEnabled = new Observable(true);
   /**
-   * Nearest distance the band reaches, in the capture's own units.
+   * Distance where bands launch, in the capture's own units.
    * @zui
    * @zdefault 12
    * @zgroup Sweep band
@@ -65,7 +65,7 @@ export class SplatEffects extends Group {
    */
   public bandNear = new Observable(D.bandNear);
   /**
-   * Farthest distance the band reaches, in the capture's own units.
+   * Distance where bands fade out, in the capture's own units.
    * @zui
    * @zdefault 150
    * @zgroup Sweep band
@@ -73,13 +73,23 @@ export class SplatEffects extends Group {
    */
   public bandFar = new Observable(D.bandFar);
   /**
-   * Seconds for one sweep from near to far.
+   * Seconds between one band launching and the next. Several bands can be
+   * under way at once.
    * @zui
-   * @zdefault 6
+   * @zdefault 3
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
   public bandPeriod = new Observable(D.bandPeriod);
+  /**
+   * Share of the near-to-far course a band covers per second; 0.15 crosses
+   * in about 6.7 seconds.
+   * @zui
+   * @zdefault 0.15
+   * @zgroup Sweep band
+   * @zgrouppriority 30
+   */
+  public bandSpeed = new Observable(D.bandSpeed);
   /**
    * Depth of the band's front (its far, leading side) as a fraction of
    * distance; 0.25 is about 28%.
@@ -335,6 +345,7 @@ export class SplatEffects extends Group {
       bandNear: this.bandNear.value,
       bandFar: this.bandFar.value,
       bandPeriod: this.bandPeriod.value,
+      bandSpeed: this.bandSpeed.value,
       bandFrontWidth: this.bandFrontWidth.value,
       bandFrontGrow: this.bandFrontGrow.value,
       bandBackWidth: this.bandBackWidth.value,

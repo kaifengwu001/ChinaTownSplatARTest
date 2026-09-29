@@ -151,6 +151,7 @@ alpha.4.
    import each other by relative path.
    - `SplatEffects.ts`, the component
    - `splatEffectGraph.ts`, the per-splat program
+   - `splatBandGraph.ts`, the sweep band's part of that program
    - `splatEffectUniforms.ts`, the settings and per-frame values
 2. If the code editor reports that it can't find `@sparkjsdev/spark`, add it
    in the Dependencies Browser. Use the version the splat package already
@@ -175,10 +176,18 @@ with timelines. Distances are in the capture's own units: this capture's
 splats sit about 12 to 490 units from the capture point, with half of them
 within 41.
 
-- **Sweep band:** a brighter band travelling from near to far every
-  **Band Period** seconds, between **Band Near** (12) and **Band Far** (150).
-  Its front (the far, leading side) swells splats and its back (the near,
-  trailing side) shrinks them, so a swell rolls outward with a trough behind it.
+- **Sweep band:** brighter bands that launch at **Band Near** (12) and travel
+  outward until they fade out at **Band Far** (150). Each band's front (the far,
+  leading side) swells splats and its back (the near, trailing side) shrinks
+  them, so a swell rolls outward with a trough behind it.
+  - **Band Period** is the time between one band launching and the next,
+    however long each takes to cross. Several bands can be under way at once.
+  - **Band Speed** is the share of the near-to-far course a band covers per
+    second: 0.15 crosses in about 6.7 seconds. With the default 3-second period,
+    two or three bands are in flight at a time.
+  - Bands fade in and out over the first and last tenth of the course.
+  - If bands are spaced more tightly than their widths, a splat only feels the
+    nearest band on each side.
   - **Band Front Width** and **Band Back Width** set how deep each side is, as
     a fraction of distance (0.25 is about 28%).
   - **Band Front Grow** is the extra size at the front's peak; 1 doubles it.

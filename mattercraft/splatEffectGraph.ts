@@ -1,4 +1,5 @@
 import { dyno, type GsplatModifier } from "@sparkjsdev/spark";
+import { bandEffect } from "./splatBandGraph";
 import type { EffectUniforms } from "./splatEffectUniforms";
 
 type Float = dyno.DynoVal<"float">;
@@ -14,20 +15,6 @@ const TAU = Math.PI * 2;
 
 const f = (value: number): Float => dyno.dynoConst("float", value);
 const one = () => f(1);
-
-/** 1 at `offset` 0, falling smoothly to 0 at `halfWidth`; 1 for negative offsets. */
-const falloff = (offset: Float, halfWidth: Float): Float =>
-  dyno.sub(one(), dyno.smoothstep(f(0), halfWidth, offset));
-
-/**
- * 0 at `offset` 0, peaking at 1 halfway to `width`, and 0 again at `width` and
- * beyond; 0 for negative offsets. Starting and ending at 0 keeps the band's two
- * sides from meeting in a hard seam.
- */
-const hump = (offset: Float, width: Float): Float => {
-  const x = dyno.clamp(dyno.div(offset, width), f(0), one());
-  return dyno.mul(dyno.mul(f(4), x), dyno.sub(one(), x));
-};
 
 /**
  * Builds a Spark object modifier that rescales and fades each splat. Only the
@@ -48,18 +35,9 @@ export function buildEffectModifier(u: EffectUniforms, on: EnabledEffects): Gspl
     let glow: Float = one();
 
     if (on.band) {
-      // Log distance, because the capture spans roughly 12 to 500 scene units
-      // and a linear sweep would spend most of its time in the sparse far field.
-      // Positive offsets are ahead of the band centre (farther away), negative
-      // ones behind it: the front swells splats, the back shrinks them.
-      const ahead = dyno.sub(dyno.log(distance), u.bandLogDistance);
-      const behind = dyno.neg(ahead);
-      const swell = dyno.mul(hump(ahead, u.bandFrontWidth), u.bandFrontGrow);
-      const trough = dyno.mul(hump(behind, u.bandBackWidth), u.bandBackShrink);
-      size = dyno.mul(size, dyno.sub(dyno.add(one(), swell), trough));
-
-      const lit = dyno.mul(falloff(ahead, u.bandFrontWidth), falloff(behind, u.bandBackWidth));
-      glow = dyno.mul(glow, dyno.add(one(), dyno.mul(lit, u.bandBrightness)));
+      const band = bandEffect(u, distance);
+      size = dyno.mul(size, band.size);
+      glow = dyno.mul(glow, band.glow);
     }
 
     if (on.periphery) {

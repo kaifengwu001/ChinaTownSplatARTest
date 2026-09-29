@@ -12,7 +12,13 @@ export interface EffectUniforms {
   cameraPosition: dyno.DynoVec3<THREE.Vector3, string>;
   cameraForward: dyno.DynoVec3<THREE.Vector3, string>;
 
-  bandLogDistance: dyno.DynoFloat<string>; // current band centre, as log(distance)
+  // Band distances are all log(distance). Band centres sit at
+  // bandLogNear + bandShift + k * bandSpacing, for those between near and far.
+  bandLogNear: dyno.DynoFloat<string>;
+  bandLogFar: dyno.DynoFloat<string>;
+  bandSpacing: dyno.DynoFloat<string>;
+  bandShift: dyno.DynoFloat<string>; // 0..bandSpacing, grows with time
+  bandEdgeFade: dyno.DynoFloat<string>; // how far bands take to fade in and out
   bandFrontWidth: dyno.DynoFloat<string>; // in log(distance)
   bandBackWidth: dyno.DynoFloat<string>;
   bandFrontGrow: dyno.DynoFloat<string>;
@@ -38,8 +44,9 @@ export interface EffectUniforms {
 export interface EffectSettings {
   bandNear: number; // capture units
   bandFar: number;
-  bandPeriod: number; // seconds per sweep
-  // The band moves near to far, so its front is the far side and its back the
+  bandPeriod: number; // seconds between one band launching and the next
+  bandSpeed: number; // share of the near-to-far course a band covers per second
+  // Bands move near to far, so their front is the far side and their back the
   // near side. Widths are in log(distance): 0.25 spans about 28% of distance.
   bandFrontWidth: number;
   bandBackWidth: number;
@@ -68,7 +75,8 @@ export interface EffectSettings {
 export const DEFAULT_EFFECT_SETTINGS: Readonly<EffectSettings> = Object.freeze({
   bandNear: 12,
   bandFar: 150,
-  bandPeriod: 6,
+  bandPeriod: 3,
+  bandSpeed: 0.15,
   bandFrontWidth: 0.25,
   bandBackWidth: 0.35,
   bandFrontGrow: 1,
@@ -89,6 +97,8 @@ export const DEFAULT_EFFECT_SETTINGS: Readonly<EffectSettings> = Object.freeze({
 });
 
 const DEG = Math.PI / 180;
+// Share of the near-to-far course over which a band fades in, and again out.
+const BAND_EDGE_FADE = 0.1;
 
 export function createUniforms(): EffectUniforms {
   const d = DEFAULT_EFFECT_SETTINGS;
@@ -96,7 +106,11 @@ export function createUniforms(): EffectUniforms {
     time: dyno.dynoFloat(0),
     cameraPosition: dyno.dynoVec3(new THREE.Vector3()),
     cameraForward: dyno.dynoVec3(new THREE.Vector3(0, 0, -1)),
-    bandLogDistance: dyno.dynoFloat(Math.log(d.bandNear)),
+    bandLogNear: dyno.dynoFloat(Math.log(d.bandNear)),
+    bandLogFar: dyno.dynoFloat(Math.log(d.bandFar)),
+    bandSpacing: dyno.dynoFloat(1),
+    bandShift: dyno.dynoFloat(0),
+    bandEdgeFade: dyno.dynoFloat(0.1),
     bandFrontWidth: dyno.dynoFloat(d.bandFrontWidth),
     bandBackWidth: dyno.dynoFloat(d.bandBackWidth),
     bandFrontGrow: dyno.dynoFloat(d.bandFrontGrow),
@@ -130,10 +144,7 @@ export function applySettings(u: EffectUniforms, s: EffectSettings, seconds: num
   const d = DEFAULT_EFFECT_SETTINGS;
   u.time.value = seconds;
 
-  const near = positive(s.bandNear, d.bandNear);
-  const far = Math.max(positive(s.bandFar, d.bandFar), near * 1.01);
-  const sweep = cycle(seconds, s.bandPeriod);
-  u.bandLogDistance.value = Math.log(near) + sweep * (Math.log(far) - Math.log(near));
+  applyBandTiming(u, s, seconds);
   u.bandFrontWidth.value = positive(s.bandFrontWidth, d.bandFrontWidth);
   u.bandBackWidth.value = positive(s.bandBackWidth, d.bandBackWidth);
   u.bandFrontGrow.value = Math.max(0, s.bandFrontGrow);
@@ -160,6 +171,25 @@ export function applySettings(u: EffectUniforms, s: EffectSettings, seconds: num
   u.dissolveThreshold.value = -softness + ease * (depth + softness);
   u.dissolveSoftness.value = softness;
   u.dissolveNoiseScale.value = positive(s.dissolveNoiseScale, d.dissolveNoiseScale);
+}
+
+/**
+ * Lays out the band grid: a band launches at `bandNear` every `bandPeriod`
+ * seconds and travels outward at `bandSpeed`, however many are already under way.
+ */
+function applyBandTiming(u: EffectUniforms, s: EffectSettings, seconds: number) {
+  const d = DEFAULT_EFFECT_SETTINGS;
+  const logNear = Math.log(positive(s.bandNear, d.bandNear));
+  const logFar = Math.max(Math.log(positive(s.bandFar, d.bandFar)), logNear + 0.01);
+  const course = logFar - logNear;
+  const speed = positive(s.bandSpeed, d.bandSpeed) * course; // log(distance) per second
+  const spacing = speed * positive(s.bandPeriod, d.bandPeriod);
+
+  u.bandLogNear.value = logNear;
+  u.bandLogFar.value = logFar;
+  u.bandSpacing.value = spacing;
+  u.bandShift.value = (speed * seconds) % spacing;
+  u.bandEdgeFade.value = BAND_EDGE_FADE * course;
 }
 
 /** Position within a repeating period, from 0 to 1. */
