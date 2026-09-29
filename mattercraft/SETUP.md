@@ -84,18 +84,24 @@ WorldTracker
 2. **SceneOffset.** Right-click `ParallaxWindow`, add a **Group** and name it
    `SceneOffset`. Set its position to **X 0, Y −1.4, Z −1.12**. These are the
    scene offset Y and scene push-back values.
-3. **GaussianSplat.** Right-click `SceneOffset` and add a **GaussianSplat**,
-   then set:
-   - **Source:** `chop_suey_50.spz`
+3. **GaussianSplat.** The splat file is not a field in the properties panel:
+   the node takes its file when it is created from one. Drag
+   `chop_suey_50.spz` from the Project panel onto `SceneOffset` in the
+   Hierarchy. This creates a GaussianSplat node that loads the file. A
+   GaussianSplat added from the **+** menu has no file and shows nothing;
+   delete it. Then set:
    - **Rotation X:** 11.56° (0.2018 in radians). This is the scene pitch.
      Leave Y and Z at 0, and do **not** add a 180° flip: the node already turns
      the capture the right way up.
    - **Scale:** 0.99 on all three axes, which must stay equal.
+   - **Position:** 0, 0, 0. The offset belongs on `SceneOffset`.
+
+   Releases from 1.0.0-alpha.4 onwards add more settings. If you have them:
    - **Level of Detail:** Off. The default builds a detail tree in the browser
      and keeps it in memory next to the original. Our file is already thinned
      for phones.
-   - **Raycastable:** off. Taps that hit the splat would not reach
-     `ParallaxWindow`'s tap handler.
+   - **Raycastable** (under Pointer Events): off. Taps that hit the splat
+     would not reach `ParallaxWindow`'s tap handler.
    - **View Dependent Color:** Off. SHARP's output has only base colour, so
      this saves shader work for nothing lost.
 
@@ -131,6 +137,8 @@ enabled on the trigger, then share its QR code or link.
 
 | Symptom | Likely cause |
 | --- | --- |
+| GaussianSplat shows nothing and has no file | It was added from the **+** menu. Delete it and drag the `.spz` onto `SceneOffset` instead. |
+| `ZapparCamera` shown in red with "!" | Select it to read the error. Most often the packages disagree on three.js: `@zcomponent/zappar-three` 4.x supports up to 0.164, the 5.0.0 alphas 0.175–0.184. |
 | Tapping does nothing | Raycastable is on for the splat, or some other raycastable object covers the screen. |
 | Window tilted, jumping, or at floor height | `ParallaxWindow` is inside a `WorldPlacementGroup`, or its own position or rotation is not zero. |
 | Splat visible outside the window | The scene is poking in front of the window plane. Push-back plus the scene's nearest content (about 1.5 m × scale) must exceed the window distance. |
