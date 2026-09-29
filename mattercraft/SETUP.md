@@ -74,7 +74,8 @@ WorldTracker
   GroundAnchorGroup
     ParallaxWindow
       SceneOffset          (a Group)
-        GaussianSplat
+        ScenePitch         (a Group)
+          GaussianSplat
 ```
 
 1. **ParallaxWindow.** Right-click `GroundAnchorGroup` and add
@@ -84,15 +85,19 @@ WorldTracker
 2. **SceneOffset.** Right-click `ParallaxWindow`, add a **Group** and name it
    `SceneOffset`. Set its position to **X 0, Y −1.4, Z −1.12**. These are the
    scene offset Y and scene push-back values.
-3. **GaussianSplat.** Right-click `SceneOffset` and add a **GaussianSplat**,
+3. **ScenePitch.** Right-click `SceneOffset`, add a **Group** and name it
+   `ScenePitch`. Set its rotation to **X 11.56°**, Y 0, Z 0. This is the scene
+   pitch, which re-aims the window about the capture point.
+4. **GaussianSplat.** Right-click `ScenePitch` and add a **GaussianSplat**,
    then set:
    - **Source:** `chop_suey_50.spz`
-   - **Rotation X:** 191.56° (3.3434 in radians), which is the 11.56° scene
-     pitch plus 180°. Leave Y and Z at 0. The extra half turn is needed
-     because the node turns every capture over, assuming SHARP's upside-down
-     convention, but the `.spz` converter has already done that. Without it
-     the scene is upside down and behind the viewer. A `.ply` or `.sog` source
-     straight from SHARP would need just 11.56°.
+   - **Rotation:** **X 180°**, Y 0, Z 0. The node turns every capture over,
+     assuming SHARP's upside-down convention, but the `.spz` converter has
+     already done that; this half turn cancels the second flip. Without it the
+     scene is upside down and behind the viewer. A `.ply` or `.sog` source
+     straight from SHARP needs 0 here instead.
+     Keep the pitch on `ScenePitch` rather than folding it in here: the editor
+     rewrites angles past 180°, and the pitch must be applied after the flip.
    - **Scale:** 0.99 on all three axes, which must stay equal.
    - **Level of Detail:** Off. The default builds a detail tree in the browser
      and keeps it in memory next to the original. Our file is already thinned
@@ -139,8 +144,8 @@ enabled on the trigger, then share its QR code or link.
 | Tapping does nothing | Raycastable is on for the splat, or some other raycastable object covers the screen. |
 | Window tilted, jumping, or at floor height | `ParallaxWindow` is inside a `WorldPlacementGroup`, or its own position or rotation is not zero. |
 | Splat visible outside the window | The scene is poking in front of the window plane. Push-back plus the scene's nearest content (about 1.5 m × scale) must exceed the window distance. |
-| Splat upside down, behind the viewer, and not clipped by the window | Rotation X is missing the extra 180° for `.spz` sources: use 191.56°. The window can only hide splats in front of the viewer. |
-| Splat upside down with a `.ply` or `.sog` source | Rotation X includes an extra 180°; use 11.56°. |
+| Splat upside down, behind the viewer, and not clipped by the window | The GaussianSplat is missing its X 180° for `.spz` sources. The window can only hide splats in front of the viewer. |
+| Splat upside down with a `.ply` or `.sog` source | The GaussianSplat has an X 180° it doesn't need; set it to 0. |
 | Window the wrong physical size | The experience is running in the browser rather than an App Clip, so tracking isn't in true metres. |
 | Splat never appears, or a load error | three.js is outside 0.180–0.184; see step 2. |
 | Low frame rate | Switch Source to `chop_suey_25.spz`. |
