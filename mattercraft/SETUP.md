@@ -9,9 +9,13 @@ in the editor.
 ## What you need
 
 - A ZapWorks account with Mattercraft, and a plan that allows publishing.
-- The splat asset `public/chop_suey_50.sog` from this project (about 6 MB,
-  589,824 splats). It is git-ignored, so it exists only on the machine that
-  generated it. `public/chop_suey_25.sog` (about 3 MB) is the lighter option.
+- The splat asset `output/mattercraft/chop_suey_50.spz` from this project
+  (9 MB, 589,824 splats). `output/mattercraft/chop_suey_25.spz` (4.4 MB,
+  294,912 splats) is the lighter option. Both are git-ignored, so they exist
+  only on the machine that generated them; `scripts/make_mattercraft_assets.sh`
+  regenerates them from the decimated PLYs.
+  Releases of the splat component before 1.0.0-alpha.5 do not read `.sog`,
+  which is why these are `.spz`.
 - `mattercraft/ParallaxWindow.ts` from this folder.
 - An iPhone with the Camera app, to scan the preview QR code.
 
@@ -49,7 +53,7 @@ Without one, the 0.4 m window is not guaranteed to be 0.4 m.
 
 ## 4. Add the files
 
-1. Drag `chop_suey_50.sog` into the Project panel.
+1. Drag `chop_suey_50.spz` into the Project panel.
 2. Add the component. Either drag `ParallaxWindow.ts` into the Project panel,
    or click **+** in the Project panel, choose **CustomThreeJSComponent**,
    rename the new file to `ParallaxWindow.ts`, and replace its contents with
@@ -82,7 +86,7 @@ WorldTracker
    scene offset Y and scene push-back values.
 3. **GaussianSplat.** Right-click `SceneOffset` and add a **GaussianSplat**,
    then set:
-   - **Source:** `chop_suey_50.sog`
+   - **Source:** `chop_suey_50.spz`
    - **Rotation X:** 11.56° (0.2018 in radians). This is the scene pitch.
      Leave Y and Z at 0, and do **not** add a 180° flip: the node already turns
      the capture the right way up.
@@ -133,4 +137,4 @@ enabled on the trigger, then share its QR code or link.
 | Splat upside down | An extra 180° X rotation was added. The node already applies it. |
 | Window the wrong physical size | The experience is running in the browser rather than an App Clip, so tracking isn't in true metres. |
 | Splat never appears, or a load error | three.js is outside 0.180–0.184; see step 2. |
-| Low frame rate | Switch Source to `chop_suey_25.sog`. |
+| Low frame rate | Switch Source to `chop_suey_25.spz`. |
