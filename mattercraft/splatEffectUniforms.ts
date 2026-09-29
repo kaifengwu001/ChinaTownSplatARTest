@@ -13,8 +13,10 @@ export interface EffectUniforms {
   cameraForward: dyno.DynoVec3<THREE.Vector3, string>;
 
   bandLogDistance: dyno.DynoFloat<string>; // current band centre, as log(distance)
-  bandHalfWidth: dyno.DynoFloat<string>; // in log(distance)
-  bandGrow: dyno.DynoFloat<string>;
+  bandFrontWidth: dyno.DynoFloat<string>; // in log(distance)
+  bandBackWidth: dyno.DynoFloat<string>;
+  bandFrontGrow: dyno.DynoFloat<string>;
+  bandBackShrink: dyno.DynoFloat<string>;
   bandBrightness: dyno.DynoFloat<string>;
 
   peripheryCosSharp: dyno.DynoFloat<string>;
@@ -37,8 +39,12 @@ export interface EffectSettings {
   bandNear: number; // capture units
   bandFar: number;
   bandPeriod: number; // seconds per sweep
-  bandWidth: number; // half-width as log(distance); 0.25 is about ±28%
-  bandGrow: number; // extra size at the band centre; 1 doubles it
+  // The band moves near to far, so its front is the far side and its back the
+  // near side. Widths are in log(distance): 0.25 spans about 28% of distance.
+  bandFrontWidth: number;
+  bandBackWidth: number;
+  bandFrontGrow: number; // extra size at the front's peak; 1 doubles it
+  bandBackShrink: number; // 0..1 size lost at the back's trough; 1 shrinks to nothing
   bandBrightness: number;
 
   peripherySharpDegrees: number;
@@ -63,8 +69,10 @@ export const DEFAULT_EFFECT_SETTINGS: Readonly<EffectSettings> = Object.freeze({
   bandNear: 12,
   bandFar: 150,
   bandPeriod: 6,
-  bandWidth: 0.25,
-  bandGrow: 1,
+  bandFrontWidth: 0.25,
+  bandBackWidth: 0.35,
+  bandFrontGrow: 1,
+  bandBackShrink: 0.8,
   bandBrightness: 0.8,
   peripherySharpDegrees: 2,
   peripherySoftDegrees: 8,
@@ -89,8 +97,10 @@ export function createUniforms(): EffectUniforms {
     cameraPosition: dyno.dynoVec3(new THREE.Vector3()),
     cameraForward: dyno.dynoVec3(new THREE.Vector3(0, 0, -1)),
     bandLogDistance: dyno.dynoFloat(Math.log(d.bandNear)),
-    bandHalfWidth: dyno.dynoFloat(d.bandWidth),
-    bandGrow: dyno.dynoFloat(d.bandGrow),
+    bandFrontWidth: dyno.dynoFloat(d.bandFrontWidth),
+    bandBackWidth: dyno.dynoFloat(d.bandBackWidth),
+    bandFrontGrow: dyno.dynoFloat(d.bandFrontGrow),
+    bandBackShrink: dyno.dynoFloat(d.bandBackShrink),
     bandBrightness: dyno.dynoFloat(d.bandBrightness),
     peripheryCosSharp: dyno.dynoFloat(Math.cos(d.peripherySharpDegrees * DEG)),
     peripheryCosSoft: dyno.dynoFloat(Math.cos(d.peripherySoftDegrees * DEG)),
@@ -124,8 +134,10 @@ export function applySettings(u: EffectUniforms, s: EffectSettings, seconds: num
   const far = Math.max(positive(s.bandFar, d.bandFar), near * 1.01);
   const sweep = cycle(seconds, s.bandPeriod);
   u.bandLogDistance.value = Math.log(near) + sweep * (Math.log(far) - Math.log(near));
-  u.bandHalfWidth.value = positive(s.bandWidth, d.bandWidth);
-  u.bandGrow.value = Math.max(0, s.bandGrow);
+  u.bandFrontWidth.value = positive(s.bandFrontWidth, d.bandFrontWidth);
+  u.bandBackWidth.value = positive(s.bandBackWidth, d.bandBackWidth);
+  u.bandFrontGrow.value = Math.max(0, s.bandFrontGrow);
+  u.bandBackShrink.value = clamp(s.bandBackShrink, 0, 1);
   u.bandBrightness.value = Math.max(0, s.bandBrightness);
 
   const sharp = clamp(s.peripherySharpDegrees, 0, 89);

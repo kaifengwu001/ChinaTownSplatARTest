@@ -175,11 +175,19 @@ with timelines. Distances are in the capture's own units: this capture's
 splats sit about 12 to 490 units from the capture point, with half of them
 within 41.
 
-- **Sweep band:** a band of enlarged, brighter splats travelling from near to
-  far every **Band Period** seconds, between **Band Near** (12) and
-  **Band Far** (150). **Band Width** is the band's half-width as a fraction of
-  distance (0.25 is about ±28%). **Band Grow** 1 doubles splat size at the
-  band's centre; **Band Brightness** is the extra brightness there.
+- **Sweep band:** a brighter band travelling from near to far every
+  **Band Period** seconds, between **Band Near** (12) and **Band Far** (150).
+  Its front (the far, leading side) swells splats and its back (the near,
+  trailing side) shrinks them, so a swell rolls outward with a trough behind it.
+  - **Band Front Width** and **Band Back Width** set how deep each side is, as
+    a fraction of distance (0.25 is about 28%).
+  - **Band Front Grow** is the extra size at the front's peak; 1 doubles it.
+  - **Band Back Shrink** is the share of size lost at the back's deepest point;
+    1 shrinks splats to nothing.
+  - Both sides are back to normal size at the band's centre and outer edges,
+    so there's no hard seam between them.
+  - **Band Brightness** is the extra brightness across the band, strongest at
+    the centre.
 - **Soft periphery:** the centre of view stays sharp out to **Sharp Degrees**
   (2°) and blurs to full effect by **Soft Degrees** (8°). At full effect,
   splats grow by **Grow** (1.5, so 2.5 times larger) and their opacity is

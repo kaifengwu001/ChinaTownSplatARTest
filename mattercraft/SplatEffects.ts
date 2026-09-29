@@ -37,7 +37,7 @@ const SIBLING_SEARCH_LEVELS = 2;
 
 /**
  * Dreamlike per-splat effects for a GaussianSplat node: a bright band sweeping
- * through the scene, soft translucent periphery, flickering fireflies, and a
+ * through the scene that swells splats at its front and shrinks them behind, soft translucent periphery, flickering fireflies, and a
  * noise dissolve. Each effect only changes splat sizes, colours and opacities.
  *
  * Add this as a child of the GaussianSplat node. It injects a Spark object
@@ -81,23 +81,43 @@ export class SplatEffects extends Group {
    */
   public bandPeriod = new Observable(D.bandPeriod);
   /**
-   * Half-width of the band as a fraction of distance; 0.25 is about ±28%.
+   * Depth of the band's front (its far, leading side) as a fraction of
+   * distance; 0.25 is about 28%.
    * @zui
    * @zdefault 0.25
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
-  public bandWidth = new Observable(D.bandWidth);
+  public bandFrontWidth = new Observable(D.bandFrontWidth);
   /**
-   * Extra splat size at the band centre; 1 doubles it.
+   * Extra splat size at the peak of the front; 1 doubles it.
    * @zui
    * @zdefault 1
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
-  public bandGrow = new Observable(D.bandGrow);
+  public bandFrontGrow = new Observable(D.bandFrontGrow);
   /**
-   * Extra brightness at the band centre.
+   * Depth of the band's back (its near, trailing side) as a fraction of
+   * distance; 0.35 is about 42%.
+   * @zui
+   * @zdefault 0.35
+   * @zgroup Sweep band
+   * @zgrouppriority 30
+   */
+  public bandBackWidth = new Observable(D.bandBackWidth);
+  /**
+   * Share of splat size lost at the deepest point of the back; 1 shrinks
+   * splats to nothing.
+   * @zui
+   * @zdefault 0.8
+   * @ztype proportion
+   * @zgroup Sweep band
+   * @zgrouppriority 30
+   */
+  public bandBackShrink = new Observable(D.bandBackShrink);
+  /**
+   * Extra brightness across the band, strongest at its centre.
    * @zui
    * @zdefault 0.8
    * @zgroup Sweep band
@@ -315,8 +335,10 @@ export class SplatEffects extends Group {
       bandNear: this.bandNear.value,
       bandFar: this.bandFar.value,
       bandPeriod: this.bandPeriod.value,
-      bandWidth: this.bandWidth.value,
-      bandGrow: this.bandGrow.value,
+      bandFrontWidth: this.bandFrontWidth.value,
+      bandFrontGrow: this.bandFrontGrow.value,
+      bandBackWidth: this.bandBackWidth.value,
+      bandBackShrink: this.bandBackShrink.value,
       bandBrightness: this.bandBrightness.value,
       peripherySharpDegrees: this.peripherySharpDegrees.value,
       peripherySoftDegrees: this.peripherySoftDegrees.value,
