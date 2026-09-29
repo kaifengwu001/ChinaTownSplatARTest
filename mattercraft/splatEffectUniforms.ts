@@ -3,11 +3,10 @@ import * as THREE from "three";
 
 /**
  * Per-frame inputs to the effect program. Anything that only changes on the
- * CPU (the band's position, the dissolve threshold, angles as cosines) is
- * precomputed here, keeping the per-splat work small.
+ * CPU (the band grid's position, angles as cosines) is precomputed here,
+ * keeping the per-splat work small.
  */
 export interface EffectUniforms {
-  time: dyno.DynoFloat<string>;
   // Camera in the splat mesh's own coordinates, so no per-splat transform is needed.
   cameraPosition: dyno.DynoVec3<THREE.Vector3, string>;
   cameraForward: dyno.DynoVec3<THREE.Vector3, string>;
@@ -19,7 +18,7 @@ export interface EffectUniforms {
   bandSpacing: dyno.DynoFloat<string>;
   bandShift: dyno.DynoFloat<string>; // 0..bandSpacing, grows with time
   bandEdgeFade: dyno.DynoFloat<string>; // how far bands take to fade in and out
-  bandFrontWidth: dyno.DynoFloat<string>; // in log(distance)
+  bandFrontWidth: dyno.DynoFloat<string>;
   bandBackWidth: dyno.DynoFloat<string>;
   bandFrontGrow: dyno.DynoFloat<string>;
   bandBackShrink: dyno.DynoFloat<string>;
@@ -29,15 +28,6 @@ export interface EffectUniforms {
   peripheryCosSoft: dyno.DynoFloat<string>;
   peripheryGrow: dyno.DynoFloat<string>;
   peripheryOpacity: dyno.DynoFloat<string>;
-
-  fireflySize: dyno.DynoFloat<string>;
-  fireflyFraction: dyno.DynoFloat<string>;
-  fireflySpeed: dyno.DynoFloat<string>;
-  fireflyBrightness: dyno.DynoFloat<string>;
-
-  dissolveThreshold: dyno.DynoFloat<string>; // splats whose noise is below this are gone
-  dissolveSoftness: dyno.DynoFloat<string>;
-  dissolveNoiseScale: dyno.DynoFloat<string>;
 }
 
 /** User-facing settings, in the units shown in the editor. */
@@ -47,7 +37,7 @@ export interface EffectSettings {
   bandPeriod: number; // seconds between one band launching and the next
   bandSpeed: number; // share of the near-to-far course a band covers per second
   // Bands move near to far, so their front is the far side and their back the
-  // near side. Widths are in log(distance): 0.25 spans about 28% of distance.
+  // near side. Widths are in log(distance): 0.2 spans about 22% of distance.
   bandFrontWidth: number;
   bandBackWidth: number;
   bandFrontGrow: number; // extra size at the front's peak; 1 doubles it
@@ -58,42 +48,25 @@ export interface EffectSettings {
   peripherySoftDegrees: number;
   peripheryGrow: number;
   peripheryOpacity: number; // 0..1
-
-  fireflySize: number; // splat size / distance
-  fireflyFraction: number; // 0..1
-  fireflySpeed: number; // radians per second
-  fireflyBrightness: number;
-
-  dissolvePeriod: number; // seconds per dissolve and re-form
-  dissolveDepth: number; // 0..1
-  dissolveSoftness: number; // 0..1
-  dissolveNoiseScale: number;
 }
 
-// Tuned for the SHARP capture: its splats sit ~12-490 units from the capture
-// point (median 41), and the smallest quarter span under 0.001 of their distance.
+// Tuned by eye in Mattercraft on the SHARP capture, whose splats sit ~12-490
+// units from the capture point (median 41). The iOS app mirrors these in
+// SplatEffectSettings.swift.
 export const DEFAULT_EFFECT_SETTINGS: Readonly<EffectSettings> = Object.freeze({
   bandNear: 12,
   bandFar: 150,
-  bandPeriod: 3,
-  bandSpeed: 0.15,
-  bandFrontWidth: 0.25,
-  bandBackWidth: 0.35,
-  bandFrontGrow: 1,
-  bandBackShrink: 0.8,
-  bandBrightness: 0.8,
-  peripherySharpDegrees: 2,
-  peripherySoftDegrees: 8,
-  peripheryGrow: 1.5,
-  peripheryOpacity: 0.35,
-  fireflySize: 0.001,
-  fireflyFraction: 0.15,
-  fireflySpeed: 2,
-  fireflyBrightness: 2.5,
-  dissolvePeriod: 10,
-  dissolveDepth: 1,
-  dissolveSoftness: 0.15,
-  dissolveNoiseScale: 0.2,
+  bandPeriod: 4,
+  bandSpeed: 0.05,
+  bandFrontWidth: 0.2,
+  bandBackWidth: 0.2,
+  bandFrontGrow: 1.75,
+  bandBackShrink: 0.12,
+  bandBrightness: 0.5,
+  peripherySharpDegrees: 5,
+  peripherySoftDegrees: 22,
+  peripheryGrow: 0.2,
+  peripheryOpacity: 0.5,
 });
 
 const DEG = Math.PI / 180;
@@ -103,7 +76,6 @@ const BAND_EDGE_FADE = 0.1;
 export function createUniforms(): EffectUniforms {
   const d = DEFAULT_EFFECT_SETTINGS;
   return {
-    time: dyno.dynoFloat(0),
     cameraPosition: dyno.dynoVec3(new THREE.Vector3()),
     cameraForward: dyno.dynoVec3(new THREE.Vector3(0, 0, -1)),
     bandLogNear: dyno.dynoFloat(Math.log(d.bandNear)),
@@ -120,13 +92,6 @@ export function createUniforms(): EffectUniforms {
     peripheryCosSoft: dyno.dynoFloat(Math.cos(d.peripherySoftDegrees * DEG)),
     peripheryGrow: dyno.dynoFloat(d.peripheryGrow),
     peripheryOpacity: dyno.dynoFloat(d.peripheryOpacity),
-    fireflySize: dyno.dynoFloat(d.fireflySize),
-    fireflyFraction: dyno.dynoFloat(d.fireflyFraction),
-    fireflySpeed: dyno.dynoFloat(d.fireflySpeed),
-    fireflyBrightness: dyno.dynoFloat(d.fireflyBrightness),
-    dissolveThreshold: dyno.dynoFloat(0),
-    dissolveSoftness: dyno.dynoFloat(d.dissolveSoftness),
-    dissolveNoiseScale: dyno.dynoFloat(d.dissolveNoiseScale),
   };
 }
 
@@ -142,7 +107,6 @@ export function applyCamera(u: EffectUniforms, mesh: THREE.Object3D, camera: THR
 /** Writes validated settings and the animation state at `seconds` into the uniforms. */
 export function applySettings(u: EffectUniforms, s: EffectSettings, seconds: number) {
   const d = DEFAULT_EFFECT_SETTINGS;
-  u.time.value = seconds;
 
   applyBandTiming(u, s, seconds);
   u.bandFrontWidth.value = positive(s.bandFrontWidth, d.bandFrontWidth);
@@ -157,20 +121,6 @@ export function applySettings(u: EffectUniforms, s: EffectSettings, seconds: num
   u.peripheryCosSoft.value = Math.cos(soft * DEG);
   u.peripheryGrow.value = Math.max(0, s.peripheryGrow);
   u.peripheryOpacity.value = clamp(s.peripheryOpacity, 0, 1);
-
-  u.fireflySize.value = positive(s.fireflySize, d.fireflySize);
-  u.fireflyFraction.value = clamp(s.fireflyFraction, 0, 1);
-  u.fireflySpeed.value = Math.max(0, s.fireflySpeed);
-  u.fireflyBrightness.value = Math.max(0, s.fireflyBrightness);
-
-  // The threshold swings from just below every splat's noise (all visible) to
-  // `dissolveDepth` (that share gone) and back, easing at both ends.
-  const softness = clamp(s.dissolveSoftness, 0.01, 1);
-  const depth = clamp(s.dissolveDepth, 0, 1);
-  const ease = 0.5 - 0.5 * Math.cos(2 * Math.PI * cycle(seconds, s.dissolvePeriod));
-  u.dissolveThreshold.value = -softness + ease * (depth + softness);
-  u.dissolveSoftness.value = softness;
-  u.dissolveNoiseScale.value = positive(s.dissolveNoiseScale, d.dissolveNoiseScale);
 }
 
 /**
@@ -190,12 +140,6 @@ function applyBandTiming(u: EffectUniforms, s: EffectSettings, seconds: number) 
   u.bandSpacing.value = spacing;
   u.bandShift.value = (speed * seconds) % spacing;
   u.bandEdgeFade.value = BAND_EDGE_FADE * course;
-}
-
-/** Position within a repeating period, from 0 to 1. */
-function cycle(seconds: number, period: number): number {
-  const p = positive(period, 1);
-  return (seconds % p) / p;
 }
 
 function positive(value: number, fallback: number): number {

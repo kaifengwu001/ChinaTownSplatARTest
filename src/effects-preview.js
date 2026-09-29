@@ -13,17 +13,17 @@ import {
 
 // Desktop check for the Mattercraft effect program: the same Spark modifier,
 // seen from the window's sweet spot with the tuned window defaults.
-//   ?fx=band,periphery,fireflies,dissolve   effects to enable (default: band)
+//   ?fx=band,periphery                      effects to enable (default: both)
 //   ?t=3.5                                  freeze time, for comparing stills
 //   ?splats=full|50|25                      asset (default 50)
 //   ?fov=20                                 vertical field of view, to zoom in
 
-const EFFECTS = ["band", "periphery", "fireflies", "dissolve"];
+const EFFECTS = ["band", "periphery"];
 const ASSETS = Object.freeze({ full: "/chop_suey.sog", 50: "/chop_suey_50.sog", 25: "/chop_suey_25.sog" });
 
 function readOptions(search) {
   const params = new URLSearchParams(search);
-  const requested = (params.get("fx") ?? "band").split(",").filter(Boolean);
+  const requested = (params.get("fx") ?? EFFECTS.join(",")).split(",").filter(Boolean);
   const unknown = requested.filter((name) => !EFFECTS.includes(name));
   if (unknown.length) throw new Error(`Unknown effect ${unknown.join(", ")}; use ${EFFECTS.join(", ")}`);
 

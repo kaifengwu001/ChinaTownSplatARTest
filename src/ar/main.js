@@ -1,5 +1,6 @@
 import { DEFAULTS, geometry } from "../config.js";
 import { loadSplatScene, placeSplatScene } from "../splat-scene.js";
+import { attachEffects, readEnabledEffects } from "../splat-effects.js";
 import { createMatte, updateMatte } from "../window-rig.js";
 import { createThreeBridge } from "./xr-bridge.js";
 import { createAnchor, anchorPoseFromCamera } from "./placement.js";
@@ -22,7 +23,10 @@ function readOptions(search) {
   const dpr = Number(params.get("dpr") ?? Math.min(window.devicePixelRatio, 2));
   if (!(dpr > 0 && dpr <= 4)) throw new Error(`?dpr must be between 0 and 4, got ${params.get("dpr")}`);
 
-  return Object.freeze({ assetKey: key, assetUrl: ASSETS[key], dpr });
+  // ?fx=none turns the dreamlike effects off, for comparison.
+  const effects = readEnabledEffects(params.get("fx"));
+
+  return Object.freeze({ assetKey: key, assetUrl: ASSETS[key], dpr, effects });
 }
 
 function waitForXR8() {
@@ -62,6 +66,8 @@ async function main() {
   const splat = await loadSplatScene(options.assetUrl);
   placeSplatScene(splat, config);
   hud.set({ splats: splat.splatCount });
+  const updateEffects = attachEffects(splat.mesh, options.effects);
+  const effectsStart = performance.now();
 
   const anchor = createAnchor(matte, splat.root);
   hud.prompt("Tap Start, then allow camera and motion access");
@@ -97,6 +103,7 @@ async function main() {
       hud.set({ tracking: `${next.status}${next.reason ? ` (${next.reason})` : ""}` });
       if (!anchor.visible) hud.prompt(trackingPrompt(next, false));
     },
+    onBeforeRender: (xrCamera) => updateEffects(xrCamera, (performance.now() - effectsStart) / 1000),
     onRendered: () => hud.tick(performance.now()),
     onView: (view) => hud.set({ view: formatView(view) }),
   });

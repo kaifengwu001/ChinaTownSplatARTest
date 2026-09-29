@@ -24,6 +24,9 @@ struct SceneConfig: Equatable {
     /// capture point.
     var scenePitchDeg: Float = 11.56
 
+    /// The sweeping bands and soft periphery from `SplatEffectSettings`.
+    var effectsEnabled = true
+
     /// Transform from SHARP splat space into world space.
     ///
     /// Composition, right to left:

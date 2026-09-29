@@ -18,12 +18,19 @@ const FAR = 1000;
  *
  * `onReady` receives `{ renderer, scene, camera }` once the GL context exists.
  * `onTracking` receives `{ status, reason }` whenever either changes.
+ * `onBeforeRender` receives the camera just before each frame is drawn.
  * `onRendered` is called after each frame is drawn.
  * `onView` receives `{ width, height, cssWidth, cssHeight, aspectError }` when
  * the render size or projection changes; `aspectError` is the ratio of the
  * projection's aspect to the buffer's, and anything but 1 means stretching.
  */
-export function createThreeBridge({ onReady, onTracking, onRendered = () => {}, onView = () => {} }) {
+export function createThreeBridge({
+  onReady,
+  onTracking,
+  onBeforeRender = () => {},
+  onRendered = () => {},
+  onView = () => {},
+}) {
   const state = { renderer: null, scene: null, camera: null, status: "", reason: "", size: "", view: "" };
 
   const syncProjection = (width, height) => {
@@ -116,6 +123,7 @@ export function createThreeBridge({ onReady, onTracking, onRendered = () => {}, 
       followCanvas(renderer.domElement);
       reportView(renderer.domElement);
       renderer.clearDepth();
+      onBeforeRender(camera);
       renderer.render(scene, camera);
       onRendered();
     },

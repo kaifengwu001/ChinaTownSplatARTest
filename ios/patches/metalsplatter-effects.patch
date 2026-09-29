@@ -1,0 +1,248 @@
+diff --git a/MetalSplatter/Resources/ShaderCommon.h b/MetalSplatter/Resources/ShaderCommon.h
+index 8f497ed..acff4a3 100644
+--- a/MetalSplatter/Resources/ShaderCommon.h
++++ b/MetalSplatter/Resources/ShaderCommon.h
+@@ -42,6 +42,30 @@ enum BufferIndex: int32_t
+     BufferIndexSplatIndex  = 2,
+ };
+ 
++// Keep in sync with Swift: SplatEffectParameters. Per-splat size, opacity and
++// brightness effects; flags are 0 (off) or 1 (on). Band distances are
++// log(distance) in splat units, measured from cameraPosition.
++typedef struct
++{
++    float bandEnabled;
++    float bandLogNear;
++    float bandLogFar;
++    float bandSpacing;
++    float bandShift;
++    float bandEdgeFade;
++    float bandFrontWidth;
++    float bandBackWidth;
++    float bandFrontGrow;
++    float bandBackShrink;
++    float bandBrightness;
++
++    float peripheryEnabled;
++    float peripheryCosSharp;
++    float peripheryCosSoft;
++    float peripheryGrow;
++    float peripheryOpacity;
++} SplatEffectParameters;
++
+ typedef struct
+ {
+     matrix_float4x4 projectionMatrix;
+@@ -65,6 +89,8 @@ typedef struct
+      */
+     uint splatCount;
+     uint indexedSplatCount;
++
++    SplatEffectParameters effects;
+ } Uniforms;
+ 
+ typedef struct
+diff --git a/MetalSplatter/Resources/SplatEffects.h b/MetalSplatter/Resources/SplatEffects.h
+new file mode 100644
+index 0000000..ac3ebd5
+--- /dev/null
++++ b/MetalSplatter/Resources/SplatEffects.h
+@@ -0,0 +1,63 @@
++#import "ShaderCommon.h"
++
++// Mirrors the Spark effect program in the parallax-window project
++// (mattercraft/splatBandGraph.ts and splatEffectGraph.ts); keep them in step.
++
++typedef struct
++{
++    float size;   // multiplies the splat's linear size
++    float alpha;  // multiplies its opacity
++    float glow;   // multiplies its colour
++} SplatEffectResult;
++
++/// 1 at `offset` 0, falling smoothly to 0 at `width`.
++inline float effectFalloff(float offset, float width) {
++    return 1 - smoothstep(0.0f, width, offset);
++}
++
++/// 0 at `offset` 0, peaking at 1 halfway to `width`, and 0 at `width` and beyond.
++inline float effectHump(float offset, float width) {
++    float x = clamp(offset / width, 0.0f, 1.0f);
++    return 4 * x * (1 - x);
++}
++
++/// Strength of a band centred at `centre`: 0 outside near..far, fading at the ends.
++inline float bandLifetime(SplatEffectParameters e, float centre) {
++    float fadeIn = smoothstep(e.bandLogNear, e.bandLogNear + e.bandEdgeFade, centre);
++    float fadeOut = smoothstep(e.bandLogFar - e.bandEdgeFade, e.bandLogFar, centre);
++    return fadeIn * (1 - fadeOut);
++}
++
++/// Band centres sit on a grid `bandSpacing` apart that slides outward by
++/// `bandShift`. A splat only needs the nearest band on each side: the one it is
++/// ahead of (whose front swells it) and the one it is behind (whose back shrinks it).
++inline void applyBand(SplatEffectParameters e, float distance, thread SplatEffectResult &r) {
++    float logDistance = log(distance);
++    float offset = logDistance - e.bandLogNear - e.bandShift;
++    float ahead = offset - e.bandSpacing * floor(offset / e.bandSpacing);
++    float behind = e.bandSpacing - ahead;
++    float bandBelow = bandLifetime(e, logDistance - ahead);
++    float bandAbove = bandLifetime(e, logDistance + behind);
++
++    float swell = effectHump(ahead, e.bandFrontWidth) * e.bandFrontGrow * bandBelow;
++    float trough = effectHump(behind, e.bandBackWidth) * e.bandBackShrink * bandAbove;
++    r.size *= max(1 + swell - trough, 0.0f);
++
++    float lit = max(effectFalloff(ahead, e.bandFrontWidth) * bandBelow,
++                    effectFalloff(behind, e.bandBackWidth) * bandAbove);
++    r.glow *= 1 + lit * e.bandBrightness;
++}
++
++/// `cosAngle` is the cosine of the angle between the view direction and the splat.
++inline void applyPeriphery(SplatEffectParameters e, float cosAngle, thread SplatEffectResult &r) {
++    float weight = 1 - smoothstep(e.peripheryCosSoft, e.peripheryCosSharp, cosAngle);
++    r.size *= 1 + weight * e.peripheryGrow;
++    r.alpha *= mix(1.0f, e.peripheryOpacity, weight);
++}
++
++inline SplatEffectResult evaluateSplatEffects(SplatEffectParameters e, float distance, float cosAngle) {
++    SplatEffectResult r = { 1, 1, 1 };
++    if (e.bandEnabled > 0.5f && e.bandSpacing > 0) applyBand(e, max(distance, 1e-3f), r);
++    if (e.peripheryEnabled > 0.5f) applyPeriphery(e, cosAngle, r);
++    return r;
++}
+diff --git a/MetalSplatter/Resources/SplatProcessing.h b/MetalSplatter/Resources/SplatProcessing.h
+index abd2622..8bd4bf6 100644
+--- a/MetalSplatter/Resources/SplatProcessing.h
++++ b/MetalSplatter/Resources/SplatProcessing.h
+@@ -14,6 +14,7 @@ half3 evaluateSH(float3 dir,
+ float3 calcCovariance2D(float3 viewPos,
+                         packed_half3 cov3Da,
+                         packed_half3 cov3Db,
++                        float cov3DScale,
+                         float4x4 viewMatrix,
+                         float focalX,
+                         float focalY,
+diff --git a/MetalSplatter/Resources/SplatProcessing.metal b/MetalSplatter/Resources/SplatProcessing.metal
+index abf337d..0b5f653 100644
+--- a/MetalSplatter/Resources/SplatProcessing.metal
++++ b/MetalSplatter/Resources/SplatProcessing.metal
+@@ -1,4 +1,5 @@
+ #import "SplatProcessing.h"
++#import "SplatEffects.h"
+ 
+ // MARK: - Color Space Conversion
+ 
+@@ -78,6 +79,7 @@ inline half3 evaluateSH(float3 dir,
+ float3 calcCovariance2D(float3 viewPos,
+                         packed_half3 cov3Da,
+                         packed_half3 cov3Db,
++                        float cov3DScale,
+                         float4x4 viewMatrix,
+                         float focalX,
+                         float focalY,
+@@ -102,7 +104,7 @@ float3 calcCovariance2D(float3 viewPos,
+         cov3Da.x, cov3Da.y, cov3Da.z,
+         cov3Da.y, cov3Db.x, cov3Db.y,
+         cov3Da.z, cov3Db.y, cov3Db.z
+-    );
++    ) * cov3DScale;
+     float3x3 cov = T * Vrk * transpose(T);
+ 
+     // Apply low-pass filter: every Gaussian should be at least
+@@ -173,7 +175,16 @@ FragmentIn splatVertex(Splat splat,
+         srgbColor = evaluateSH(viewDir, splat.color.rgb, shCoefficients, shDegree, splatIndex);
+     }
+ 
++    // Size scales the splat's extent linearly, so its covariance by the square.
++    // The view matrix carries only a uniform scale, so view-space angles match
++    // splat-space ones.
++    float3 toSplat = float3(splat.position) - float3(uniforms.cameraPosition);
++    float cosAngle = -viewPosition3.z / max(length(viewPosition3), 1e-6f);
++    SplatEffectResult effect = evaluateSplatEffects(uniforms.effects, length(toSplat), cosAngle);
++    srgbColor *= half(effect.glow);
++
+     float3 cov2D = calcCovariance2D(viewPosition3, splat.covA, splat.covB,
++                                    effect.size * effect.size,
+                                     uniforms.viewMatrix,
+                                     uniforms.focalX, uniforms.focalY,
+                                     uniforms.tanHalfFovX, uniforms.tanHalfFovY);
+@@ -211,7 +222,7 @@ FragmentIn splatVertex(Splat splat,
+     out.relativePosition = kBoundsRadius * relativeCoordinates;
+ 
+     // Convert from sRGB to linear to match Metal expectations for shader color output
+-    out.color = half4(sRGBToLinear(srgbColor), splat.color.a);
++    out.color = half4(sRGBToLinear(srgbColor), splat.color.a * half(effect.alpha));
+     return out;
+ }
+ 
+diff --git a/MetalSplatter/Sources/SplatEffectParameters.swift b/MetalSplatter/Sources/SplatEffectParameters.swift
+new file mode 100644
+index 0000000..177120f
+--- /dev/null
++++ b/MetalSplatter/Sources/SplatEffectParameters.swift
+@@ -0,0 +1,31 @@
++import Foundation
++
++/// Per-splat size, opacity and brightness effects evaluated in the vertex
++/// shader. Splat positions are untouched, so sorting is unaffected.
++///
++/// Keep in sync with ShaderCommon.h : SplatEffectParameters. Flags are 0 (off)
++/// or 1 (on); band distances are log(distance) in splat units from the camera.
++public struct SplatEffectParameters: Equatable, Sendable {
++    public var bandEnabled: Float = 0
++    public var bandLogNear: Float = 0
++    public var bandLogFar: Float = 0
++    public var bandSpacing: Float = 0
++    public var bandShift: Float = 0
++    public var bandEdgeFade: Float = 0
++    public var bandFrontWidth: Float = 1
++    public var bandBackWidth: Float = 1
++    public var bandFrontGrow: Float = 0
++    public var bandBackShrink: Float = 0
++    public var bandBrightness: Float = 0
++
++    public var peripheryEnabled: Float = 0
++    public var peripheryCosSharp: Float = 1
++    public var peripheryCosSoft: Float = 0
++    public var peripheryGrow: Float = 0
++    public var peripheryOpacity: Float = 1
++
++    /// All effects off.
++    public static let none = SplatEffectParameters()
++
++    public init() {}
++}
+diff --git a/MetalSplatter/Sources/SplatRenderer.swift b/MetalSplatter/Sources/SplatRenderer.swift
+index a761701..9b5e539 100644
+--- a/MetalSplatter/Sources/SplatRenderer.swift
++++ b/MetalSplatter/Sources/SplatRenderer.swift
+@@ -70,6 +70,8 @@ public final class SplatRenderer: @unchecked Sendable {
+ 
+         var splatCount: UInt32
+         var indexedSplatCount: UInt32
++
++        var effects: SplatEffectParameters
+     }
+ 
+     // Keep in sync with Shaders.metal : UniformsArray
+@@ -139,6 +141,9 @@ public final class SplatRenderer: @unchecked Sendable {
+ #endif
+     }
+ 
++    /// Per-splat effects applied from the next render on.
++    public var effects = SplatEffectParameters.none
++
+     /// Called when a sort starts
+     public var onSortStart: (@Sendable () -> Void)? {
+         get { sorter.onSortStart }
+@@ -644,7 +649,8 @@ public final class SplatRenderer: @unchecked Sendable {
+                                     tanHalfFovY: tanHalfFovY,
+                                     chunkCount: chunkCount,
+                                     splatCount: splatCount,
+-                                    indexedSplatCount: indexedSplatCount)
++                                    indexedSplatCount: indexedSplatCount,
++                                    effects: effects)
+             renderState.uniforms.pointee.setUniforms(index: i, uniforms)
+         }
+     }

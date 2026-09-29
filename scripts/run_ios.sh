@@ -11,6 +11,20 @@ BUNDLE_ID=com.kaifengwu.parallaxwindow
 APP=~/Library/Developer/Xcode/DerivedData/Build/Products/Debug-iphoneos/ParallaxWindow.app
 
 command -v xcodegen >/dev/null || { echo "xcodegen not installed: brew install xcodegen"; exit 1; }
+
+# The splat effects live in MetalSplatter's vertex shader, kept as a patch on
+# the local checkout (made against upstream 464eb37). Apply it unless it
+# already is.
+PATCH="$PWD/patches/metalsplatter-effects.patch"
+VENDOR=../vendor-metalsplatter
+if ! git -C "$VENDOR" apply --reverse --check "$PATCH" 2>/dev/null; then
+  git -C "$VENDOR" apply "$PATCH" || {
+    echo "Could not apply $PATCH to $VENDOR. Is the checkout at a different commit?"
+    exit 1
+  }
+  echo "Applied MetalSplatter effects patch"
+fi
+
 xcodegen generate
 
 # Columns are separated by runs of spaces. Match the state field exactly, since

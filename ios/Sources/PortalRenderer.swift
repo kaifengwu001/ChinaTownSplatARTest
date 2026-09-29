@@ -52,6 +52,10 @@ final class PortalRenderer {
 
     var config = SceneConfig()
 
+    private let effectSettings = SplatEffectSettings()
+    /// ARFrame timestamp the effect animation counts from, set on the first frame.
+    private var effectsOrigin: TimeInterval?
+
     /// Splats loaded, for the on-screen readout.
     private(set) var splatCount: Int = 0
 
@@ -188,6 +192,7 @@ final class PortalRenderer {
         if let anchor = windowAnchor, let splatRenderer {
             let target = ensureSplatTexture(size: drawable.texture)
             let model = config.sceneModelMatrix(windowAnchor: anchor)
+            splatRenderer.effects = effectParameters(at: frame.timestamp)
 
             // MetalSplatter has no model matrix, so the scene transform is
             // folded into the view. A *uniform* scale here is safe: the shader
@@ -281,6 +286,13 @@ final class PortalRenderer {
     }
 
     // MARK: - Helpers
+
+    private func effectParameters(at timestamp: TimeInterval) -> SplatEffectParameters {
+        guard config.effectsEnabled else { return .none }
+        let origin = effectsOrigin ?? timestamp
+        effectsOrigin = origin
+        return effectSettings.parameters(atSeconds: timestamp - origin)
+    }
 
     /// Maps the full-screen quad's texture coordinates through ARKit's display
     /// transform so the captured image lands correctly in the viewport.

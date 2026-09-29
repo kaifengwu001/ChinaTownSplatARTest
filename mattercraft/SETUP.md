@@ -147,7 +147,7 @@ alpha.4.
 
 ### Add it
 
-1. Drag all three files into the Project panel, in the same folder: they
+1. Drag all four files into the Project panel, in the same folder: they
    import each other by relative path.
    - `SplatEffects.ts`, the component
    - `splatEffectGraph.ts`, the per-splat program
@@ -168,9 +168,10 @@ alpha.4.
 The effects also run in the editor viewport, following the editor camera, so
 you can tune them there before previewing on the phone.
 
-### The four effects
+### The two effects
 
-Only **Sweep band** is on by default. Switching an effect on or off
+Both effects are on by default, with the values tuned for this capture. The
+iOS app and the WebAR page use the same values. Switching an effect on or off
 recompiles the program; every other setting updates live and can be animated
 with timelines. Distances are in the capture's own units: this capture's
 splats sit about 12 to 490 units from the capture point, with half of them
@@ -183,53 +184,44 @@ within 41.
   - **Band Period** is the time between one band launching and the next,
     however long each takes to cross. Several bands can be under way at once.
   - **Band Speed** is the share of the near-to-far course a band covers per
-    second: 0.15 crosses in about 6.7 seconds. With the default 3-second period,
-    two or three bands are in flight at a time.
+    second: 0.05 crosses in 20 seconds. With the default 4-second period, about
+    five bands are in flight at a time.
+  - **Band Near** must be above 0; at 0 or below it falls back to 12.
   - Bands fade in and out over the first and last tenth of the course.
   - If bands are spaced more tightly than their widths, a splat only feels the
     nearest band on each side.
   - **Band Front Width** and **Band Back Width** set how deep each side is, as
-    a fraction of distance (0.25 is about 28%).
-  - **Band Front Grow** is the extra size at the front's peak; 1 doubles it.
-  - **Band Back Shrink** is the share of size lost at the back's deepest point;
-    1 shrinks splats to nothing.
+    a fraction of distance (0.2 each, about 22%).
+  - **Band Front Grow** is the extra size at the front's peak (1.75); 1
+    doubles it.
+  - **Band Back Shrink** is the share of size lost at the back's deepest point
+    (0.12); 1 shrinks splats to nothing.
   - Both sides are back to normal size at the band's centre and outer edges,
     so there's no hard seam between them.
-  - **Band Brightness** is the extra brightness across the band, strongest at
-    the centre.
+  - **Band Brightness** is the extra brightness across the band (0.5),
+    strongest at the centre.
 - **Soft periphery:** the centre of view stays sharp out to **Sharp Degrees**
-  (2°) and blurs to full effect by **Soft Degrees** (8°). At full effect,
-  splats grow by **Grow** (1.5, so 2.5 times larger) and their opacity is
-  multiplied by **Opacity** (0.35). The window spans about ±9° at 1.28 m, so
-  these angles are small on purpose.
-- **Fireflies:** a **Fraction** (15%) of the small splats blink brightly at
-  their own random rhythm. A splat counts as small when its size divided by
-  its distance is under **Size** (0.001, roughly the smallest quarter of this
-  capture). **Speed** sets the blink rate and **Brightness** the peak.
-- **Dissolve:** drifting patches of the scene shrink to nothing and grow back
-  over **Period** seconds (10). **Depth** 1 dissolves all of it at the deepest
-  point, **Softness** widens the fade at patch edges, and **Noise Scale** sets
-  the patch size (larger means smaller patches).
+  (5°) and softens to full effect by **Soft Degrees** (22°). At full effect,
+  splats grow by **Grow** (0.2, so 1.2 times larger) and their opacity is
+  multiplied by **Opacity** (0.5).
 
 ### Things to know
 
 - **The room shows through.** Behind the scene there is only the camera feed,
-  so wherever the periphery or dissolve makes splats translucent, your real
+  so wherever the periphery makes splats translucent, your real
   room shows through the window.
 - **Enlarging splats costs frame rate; shrinking and fading are nearly free.**
   Larger splats cover more screen pixels, and filling pixels is what limits
   phones. If the frame rate drops, lower the Grow settings first, then switch
   Source to `chop_suey_25.spz`.
-- **Try one effect at a time first.** All four together are very busy.
-
 ### Tuning on the desktop
 
-The web project runs the same three files on the desktop. Run `npm run dev`,
+The web project runs the same files on the desktop. Run `npm run dev`,
 accept the self-signed certificate, and open
 `https://localhost:5174/effects.html`. It shows the scene through the window
 from its sweet spot. URL options:
 
-- `?fx=band,periphery,fireflies,dissolve` chooses effects (default: band);
+- `?fx=band` or `?fx=periphery` shows one effect (default: both);
 - `?t=3` freezes time, for comparing stills;
 - `?fov=20` zooms in;
 - `?splats=25` uses the lighter asset.

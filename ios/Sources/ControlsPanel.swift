@@ -15,6 +15,11 @@ struct ControlsPanel: View {
             slider("scene offset Y", value: $config.sceneOffsetY, in: -6...6, unit: "m")
             slider("scene scale", value: $config.sceneScale, in: 0.1...4, unit: "x")
 
+            Toggle("dreamlike effects", isOn: $config.effectsEnabled)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.white)
+                .controlSize(.mini)
+
             Button("Reset to tuned defaults") { config = SceneConfig() }
                 .font(.system(.caption2, design: .monospaced))
                 .padding(.top, 2)

@@ -36,9 +36,10 @@ const SEARCH_FRAMES = 600;
 const SIBLING_SEARCH_LEVELS = 2;
 
 /**
- * Dreamlike per-splat effects for a GaussianSplat node: a bright band sweeping
- * through the scene that swells splats at its front and shrinks them behind, soft translucent periphery, flickering fireflies, and a
- * noise dissolve. Each effect only changes splat sizes, colours and opacities.
+ * Dreamlike per-splat effects for a GaussianSplat node: bright bands sweeping
+ * through the scene that swell splats at their front and shrink them behind,
+ * and a soft translucent periphery around the centre of view. Each effect only
+ * changes splat sizes, colours and opacities.
  *
  * Add this as a child of the GaussianSplat node. It injects a Spark object
  * modifier into that node's internal splat mesh, so it depends on how the
@@ -57,7 +58,7 @@ export class SplatEffects extends Group {
    */
   public bandEnabled = new Observable(true);
   /**
-   * Distance where bands launch, in the capture's own units.
+   * Distance where bands launch, in the capture's own units. Must be above 0.
    * @zui
    * @zdefault 12
    * @zgroup Sweep band
@@ -76,25 +77,25 @@ export class SplatEffects extends Group {
    * Seconds between one band launching and the next. Several bands can be
    * under way at once.
    * @zui
-   * @zdefault 3
+   * @zdefault 4
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
   public bandPeriod = new Observable(D.bandPeriod);
   /**
-   * Share of the near-to-far course a band covers per second; 0.15 crosses
-   * in about 6.7 seconds.
+   * Share of the near-to-far course a band covers per second; 0.05 crosses
+   * in 20 seconds.
    * @zui
-   * @zdefault 0.15
+   * @zdefault 0.05
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
   public bandSpeed = new Observable(D.bandSpeed);
   /**
    * Depth of the band's front (its far, leading side) as a fraction of
-   * distance; 0.25 is about 28%.
+   * distance; 0.2 is about 22%.
    * @zui
-   * @zdefault 0.25
+   * @zdefault 0.2
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
@@ -102,16 +103,16 @@ export class SplatEffects extends Group {
   /**
    * Extra splat size at the peak of the front; 1 doubles it.
    * @zui
-   * @zdefault 1
+   * @zdefault 1.75
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
   public bandFrontGrow = new Observable(D.bandFrontGrow);
   /**
    * Depth of the band's back (its near, trailing side) as a fraction of
-   * distance; 0.35 is about 42%.
+   * distance; 0.2 is about 22%.
    * @zui
-   * @zdefault 0.35
+   * @zdefault 0.2
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
@@ -120,7 +121,7 @@ export class SplatEffects extends Group {
    * Share of splat size lost at the deepest point of the back; 1 shrinks
    * splats to nothing.
    * @zui
-   * @zdefault 0.8
+   * @zdefault 0.12
    * @ztype proportion
    * @zgroup Sweep band
    * @zgrouppriority 30
@@ -129,7 +130,7 @@ export class SplatEffects extends Group {
   /**
    * Extra brightness across the band, strongest at its centre.
    * @zui
-   * @zdefault 0.8
+   * @zdefault 0.5
    * @zgroup Sweep band
    * @zgrouppriority 30
    */
@@ -137,15 +138,15 @@ export class SplatEffects extends Group {
 
   /**
    * @zui
-   * @zdefault false
+   * @zdefault true
    * @zgroup Soft periphery
    * @zgrouppriority 29
    */
-  public peripheryEnabled = new Observable(false);
+  public peripheryEnabled = new Observable(true);
   /**
    * Angle from the centre of view kept fully sharp.
    * @zui
-   * @zdefault 2
+   * @zdefault 5
    * @zgroup Soft periphery
    * @zgrouppriority 29
    */
@@ -153,15 +154,15 @@ export class SplatEffects extends Group {
   /**
    * Angle at which the effect reaches full strength.
    * @zui
-   * @zdefault 8
+   * @zdefault 22
    * @zgroup Soft periphery
    * @zgrouppriority 29
    */
   public peripherySoftDegrees = new Observable(D.peripherySoftDegrees);
   /**
-   * Extra splat size at full strength; 1.5 makes splats 2.5 times larger.
+   * Extra splat size at full strength; 1 doubles it.
    * @zui
-   * @zdefault 1.5
+   * @zdefault 0.2
    * @zgroup Soft periphery
    * @zgrouppriority 29
    */
@@ -169,95 +170,12 @@ export class SplatEffects extends Group {
   /**
    * Opacity multiplier at full strength.
    * @zui
-   * @zdefault 0.35
+   * @zdefault 0.5
    * @ztype proportion
    * @zgroup Soft periphery
    * @zgrouppriority 29
    */
   public peripheryOpacity = new Observable(D.peripheryOpacity);
-
-  /**
-   * @zui
-   * @zdefault false
-   * @zgroup Fireflies
-   * @zgrouppriority 28
-   */
-  public firefliesEnabled = new Observable(false);
-  /**
-   * Splat size divided by distance below which a splat counts as small.
-   * @zui
-   * @zdefault 0.001
-   * @zgroup Fireflies
-   * @zgrouppriority 28
-   */
-  public fireflySize = new Observable(D.fireflySize);
-  /**
-   * Share of small splats that flicker.
-   * @zui
-   * @zdefault 0.15
-   * @ztype proportion
-   * @zgroup Fireflies
-   * @zgrouppriority 28
-   */
-  public fireflyFraction = new Observable(D.fireflyFraction);
-  /**
-   * Flicker rate in radians per second, varied per splat.
-   * @zui
-   * @zdefault 2
-   * @zgroup Fireflies
-   * @zgrouppriority 28
-   */
-  public fireflySpeed = new Observable(D.fireflySpeed);
-  /**
-   * Extra brightness at the peak of a blink.
-   * @zui
-   * @zdefault 2.5
-   * @zgroup Fireflies
-   * @zgrouppriority 28
-   */
-  public fireflyBrightness = new Observable(D.fireflyBrightness);
-
-  /**
-   * @zui
-   * @zdefault false
-   * @zgroup Dissolve
-   * @zgrouppriority 27
-   */
-  public dissolveEnabled = new Observable(false);
-  /**
-   * Seconds for one dissolve and re-form.
-   * @zui
-   * @zdefault 10
-   * @zgroup Dissolve
-   * @zgrouppriority 27
-   */
-  public dissolvePeriod = new Observable(D.dissolvePeriod);
-  /**
-   * How much of the scene dissolves at the deepest point; 1 is all of it.
-   * @zui
-   * @zdefault 1
-   * @ztype proportion
-   * @zgroup Dissolve
-   * @zgrouppriority 27
-   */
-  public dissolveDepth = new Observable(D.dissolveDepth);
-  /**
-   * Width of the fade at patch edges.
-   * @zui
-   * @zdefault 0.15
-   * @ztype proportion
-   * @zgroup Dissolve
-   * @zgrouppriority 27
-   */
-  public dissolveSoftness = new Observable(D.dissolveSoftness);
-  /**
-   * Noise frequency; larger values give smaller patches.
-   * @zui
-   * @zdefault 0.2
-   * @zgroup Dissolve
-   * @zgrouppriority 27
-   */
-  public dissolveNoiseScale = new Observable(D.dissolveNoiseScale);
 
   private readonly uniforms = createUniforms();
   private mesh: SplatMeshLike | null = null;
@@ -272,8 +190,6 @@ export class SplatEffects extends Group {
     const rebuild = (_enabled: boolean) => this.install();
     this.register(this.bandEnabled, rebuild);
     this.register(this.peripheryEnabled, rebuild);
-    this.register(this.firefliesEnabled, rebuild);
-    this.register(this.dissolveEnabled, rebuild);
 
     const camera = useCamera(contextManager);
     this.register(useOnBeforeRender(contextManager), (dt: number) => this.frame(dt, camera.value));
@@ -335,8 +251,6 @@ export class SplatEffects extends Group {
     return {
       band: this.bandEnabled.value,
       periphery: this.peripheryEnabled.value,
-      fireflies: this.firefliesEnabled.value,
-      dissolve: this.dissolveEnabled.value,
     };
   }
 
@@ -355,14 +269,6 @@ export class SplatEffects extends Group {
       peripherySoftDegrees: this.peripherySoftDegrees.value,
       peripheryGrow: this.peripheryGrow.value,
       peripheryOpacity: this.peripheryOpacity.value,
-      fireflySize: this.fireflySize.value,
-      fireflyFraction: this.fireflyFraction.value,
-      fireflySpeed: this.fireflySpeed.value,
-      fireflyBrightness: this.fireflyBrightness.value,
-      dissolvePeriod: this.dissolvePeriod.value,
-      dissolveDepth: this.dissolveDepth.value,
-      dissolveSoftness: this.dissolveSoftness.value,
-      dissolveNoiseScale: this.dissolveNoiseScale.value,
     };
   }
 
