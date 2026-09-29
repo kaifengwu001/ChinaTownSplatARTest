@@ -137,6 +137,86 @@ there. On the phone, only the part seen through the window shows.
 Click **Publish**. When it asks about triggers, make sure **App Clips** is
 enabled on the trigger, then share its QR code or link.
 
+## 9. Dreamlike effects (optional)
+
+`SplatEffects` runs a small GPU program over every splat each frame, changing
+only its size, brightness and opacity. Splats never move, so the depth sort
+and the window clipping stay correct. It works with both Spark versions the
+splat package has shipped: 0.1 in releases 1.0.0-alpha.1 to .3, and 2 from
+alpha.4.
+
+### Add it
+
+1. Drag all three files into the Project panel, in the same folder: they
+   import each other by relative path.
+   - `SplatEffects.ts`, the component
+   - `splatEffectGraph.ts`, the per-splat program
+   - `splatEffectUniforms.ts`, the settings and per-frame values
+2. If the code editor reports that it can't find `@sparkjsdev/spark`, add it
+   in the Dependencies Browser. Use the version the splat package already
+   depends on: 0.1.x for splat package alpha.1 to .3, 2.x from alpha.4.
+3. Right-click the `GaussianSplat` node and add `SplatEffects`. It must be a
+   child of that node, which is how it finds the splats:
+
+   ```
+   ScenePitch
+     GaussianSplat
+       SplatEffects
+   ```
+
+The effects also run in the editor viewport, following the editor camera, so
+you can tune them there before previewing on the phone.
+
+### The four effects
+
+Only **Sweep band** is on by default. Switching an effect on or off
+recompiles the program; every other setting updates live and can be animated
+with timelines. Distances are in the capture's own units: this capture's
+splats sit about 12 to 490 units from the capture point, with half of them
+within 41.
+
+- **Sweep band:** a band of enlarged, brighter splats travelling from near to
+  far every **Band Period** seconds, between **Band Near** (12) and
+  **Band Far** (150). **Band Width** is the band's half-width as a fraction of
+  distance (0.25 is about ±28%). **Band Grow** 1 doubles splat size at the
+  band's centre; **Band Brightness** is the extra brightness there.
+- **Soft periphery:** the centre of view stays sharp out to **Sharp Degrees**
+  (2°) and blurs to full effect by **Soft Degrees** (8°). At full effect,
+  splats grow by **Grow** (1.5, so 2.5 times larger) and their opacity is
+  multiplied by **Opacity** (0.35). The window spans about ±9° at 1.28 m, so
+  these angles are small on purpose.
+- **Fireflies:** a **Fraction** (15%) of the small splats blink brightly at
+  their own random rhythm. A splat counts as small when its size divided by
+  its distance is under **Size** (0.001, roughly the smallest quarter of this
+  capture). **Speed** sets the blink rate and **Brightness** the peak.
+- **Dissolve:** drifting patches of the scene shrink to nothing and grow back
+  over **Period** seconds (10). **Depth** 1 dissolves all of it at the deepest
+  point, **Softness** widens the fade at patch edges, and **Noise Scale** sets
+  the patch size (larger means smaller patches).
+
+### Things to know
+
+- **The room shows through.** Behind the scene there is only the camera feed,
+  so wherever the periphery or dissolve makes splats translucent, your real
+  room shows through the window.
+- **Enlarging splats costs frame rate; shrinking and fading are nearly free.**
+  Larger splats cover more screen pixels, and filling pixels is what limits
+  phones. If the frame rate drops, lower the Grow settings first, then switch
+  Source to `chop_suey_25.spz`.
+- **Try one effect at a time first.** All four together are very busy.
+
+### Tuning on the desktop
+
+The web project runs the same three files on the desktop. Run `npm run dev`,
+accept the self-signed certificate, and open
+`https://localhost:5174/effects.html`. It shows the scene through the window
+from its sweet spot. URL options:
+
+- `?fx=band,periphery,fireflies,dissolve` chooses effects (default: band);
+- `?t=3` freezes time, for comparing stills;
+- `?fov=20` zooms in;
+- `?splats=25` uses the lighter asset.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -147,5 +227,7 @@ enabled on the trigger, then share its QR code or link.
 | Splat upside down, behind the viewer, and not clipped by the window | The GaussianSplat is missing its X 180° for `.spz` sources. The window can only hide splats in front of the viewer. |
 | Splat upside down with a `.ply` or `.sog` source | The GaussianSplat has an X 180° it doesn't need; set it to 0. |
 | Window the wrong physical size | The experience is running in the browser rather than an App Clip, so tracking isn't in true metres. |
-| Splat never appears, or a load error | three.js is outside 0.180–0.184; see step 2. |
-| Low frame rate | Switch Source to `chop_suey_25.spz`. |
+| Splat never appears, or a load error | three.js is outside the splat package's range: 0.175–0.184 for alpha.1 to .3, 0.180–0.184 from alpha.4. See step 2. |
+| Low frame rate | Switch Source to `chop_suey_25.spz`. With effects on, lower their Grow settings first. |
+| Effects do nothing; console says "no splat mesh found" | `SplatEffects` isn't a child of the `GaussianSplat` node. |
+| Console says "Spark rejected the effect program" | The Spark version in the project differs from the splat package's; see section 9, step 2. Send me the full console error. |
