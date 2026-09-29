@@ -29,21 +29,17 @@ in the editor.
 
 ## 2. Set the dependency versions
 
-Every release of the splat component needs three.js 0.175 or newer. That chain
-only exists in a **TypeScript 5** project: `@zcomponent/three` 2.x supports
-three.js 0.175 and above, and needs `@zcomponent/core` 2.x, whose type
-definitions use TypeScript 5 decorators.
+Open the **Dependencies Browser** in the left panel.
 
-Do not change `three`, `@zcomponent/core` or `@zcomponent/three` by hand.
-Mattercraft manages those versions, and moving core to 2.x in a TypeScript 4
-project breaks the build with errors such as
-`Cannot find name 'ClassMethodDecoratorContext'`.
-
-1. Open the project's `package.json` and check `three` and `typescript`.
-2. If three.js is 0.175 or newer, add `@zcomponent/three-gaussian-splatting`
-   (1.0.0-alpha.5 or later) from the Dependencies Browser.
-3. If it is older, the project is on the TypeScript 4 stack and cannot run the
-   splat component; it needs to be a TypeScript 5 project first.
+1. Check the `three` version. The splat package needs three.js
+   **0.180 to 0.184**.
+2. If the project is on an older three.js, move all of these to their alpha
+   releases, which are the ones that support three.js 0.180 and above:
+   - `@zcomponent/core`: 2.0.0-alpha
+   - `@zcomponent/three`: 2.0.0-alpha
+   - `@zcomponent/zappar-three`: 5.0.0-alpha
+   - `three`: 0.184.0
+3. Add `@zcomponent/three-gaussian-splatting` (1.0.0-alpha.5 or later).
 
 ## 3. Enable App Clips
 
@@ -91,9 +87,12 @@ WorldTracker
 3. **GaussianSplat.** Right-click `SceneOffset` and add a **GaussianSplat**,
    then set:
    - **Source:** `chop_suey_50.spz`
-   - **Rotation X:** 11.56° (0.2018 in radians). This is the scene pitch.
-     Leave Y and Z at 0, and do **not** add a 180° flip: the node already turns
-     the capture the right way up.
+   - **Rotation X:** 191.56° (3.3434 in radians), which is the 11.56° scene
+     pitch plus 180°. Leave Y and Z at 0. The extra half turn is needed
+     because the node turns every capture over, assuming SHARP's upside-down
+     convention, but the `.spz` converter has already done that. Without it
+     the scene is upside down and behind the viewer. A `.ply` or `.sog` source
+     straight from SHARP would need just 11.56°.
    - **Scale:** 0.99 on all three axes, which must stay equal.
    - **Level of Detail:** Off. The default builds a detail tree in the browser
      and keeps it in memory next to the original. Our file is already thinned
@@ -109,7 +108,9 @@ WorldTracker
 
 - a white outline of the 0.4 m aperture 1.28 m in front of that origin, along
   −Z;
-- the street scene behind it, framed the way the desktop preview frames it.
+- the street scene upright and further along −Z than the outline, framed the
+  way the desktop preview frames it. If the scene is upside down or on the +Z
+  side of the origin, recheck Rotation X before previewing on the phone.
 
 The invisible matte is hidden in the editor, so the whole splat is visible
 there. On the phone, only the part seen through the window shows.
@@ -138,7 +139,8 @@ enabled on the trigger, then share its QR code or link.
 | Tapping does nothing | Raycastable is on for the splat, or some other raycastable object covers the screen. |
 | Window tilted, jumping, or at floor height | `ParallaxWindow` is inside a `WorldPlacementGroup`, or its own position or rotation is not zero. |
 | Splat visible outside the window | The scene is poking in front of the window plane. Push-back plus the scene's nearest content (about 1.5 m × scale) must exceed the window distance. |
-| Splat upside down | An extra 180° X rotation was added. The node already applies it. |
+| Splat upside down, behind the viewer, and not clipped by the window | Rotation X is missing the extra 180° for `.spz` sources: use 191.56°. The window can only hide splats in front of the viewer. |
+| Splat upside down with a `.ply` or `.sog` source | Rotation X includes an extra 180°; use 11.56°. |
 | Window the wrong physical size | The experience is running in the browser rather than an App Clip, so tracking isn't in true metres. |
 | Splat never appears, or a load error | three.js is outside 0.180–0.184; see step 2. |
 | Low frame rate | Switch Source to `chop_suey_25.spz`. |
