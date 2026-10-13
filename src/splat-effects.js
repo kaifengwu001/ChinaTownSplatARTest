@@ -1,4 +1,5 @@
 import { buildEffectModifier } from "../mattercraft/splatEffectGraph.ts";
+import { dyno } from "@sparkjsdev/spark";
 import {
   DEFAULT_EFFECT_SETTINGS,
   applyCamera,
@@ -21,16 +22,30 @@ export function readEnabledEffects(value) {
 
 /**
  * Puts the effect program shared with the Mattercraft component on a Spark
- * SplatMesh. Returns `update(camera, seconds)`, to call before each render.
+ * SplatMesh. Returns `update(camera, seconds, strength = 1)` before each render.
+ * Strength lets memory activation introduce the ambient look after expansion.
  */
 export function attachEffects(mesh, enabled, settings = DEFAULT_EFFECT_SETTINGS) {
   if (!EFFECT_NAMES.some((name) => enabled[name])) return () => {};
 
   const uniforms = createUniforms();
-  mesh.objectModifier = buildEffectModifier(uniforms, enabled);
+  const strength = dyno.dynoFloat(1);
+  const effect = buildEffectModifier(uniforms, enabled);
+  const modifier = dyno.dynoBlock({ gsplat: dyno.Gsplat }, { gsplat: dyno.Gsplat }, ({ gsplat }) => {
+    const original = dyno.splitGsplat(gsplat).outputs;
+    const changed = dyno.splitGsplat(effect.apply({ gsplat }).gsplat).outputs;
+    return { gsplat: dyno.combineGsplat({
+      gsplat,
+      scales: dyno.mix(original.scales, changed.scales, strength),
+      rgb: dyno.mix(original.rgb, changed.rgb, strength),
+      opacity: dyno.mix(original.opacity, changed.opacity, strength),
+    }) };
+  });
+  mesh.objectModifiers = [...(mesh.objectModifiers ?? []), modifier];
   mesh.updateGenerator();
 
-  return (camera, seconds) => {
+  return (camera, seconds, amount = 1) => {
+    strength.value = amount;
     applySettings(uniforms, settings, seconds);
     applyCamera(uniforms, mesh, camera);
     mesh.updateVersion();

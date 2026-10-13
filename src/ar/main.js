@@ -5,6 +5,7 @@ import { createMatte, updateMatte } from "../window-rig.js";
 import { createThreeBridge } from "./xr-bridge.js";
 import { createAnchor, anchorPoseFromCamera } from "./placement.js";
 import { createHud, trackingPrompt } from "./hud.js";
+import { createMemoryWindow } from "../memory-window.js";
 
 // Selectable with ?splats=full|50|25. Half the splats is the default because
 // Spark's sort and 8th Wall's SLAM share the phone's CPU; full is the native
@@ -50,6 +51,7 @@ async function main() {
   const canvas = document.getElementById("camerafeed");
   const startButton = document.getElementById("start");
   const resetButton = document.getElementById("reset");
+  const activateButton = document.getElementById("activate-memory");
   const hud = createHud(document.getElementById("hud"), document.getElementById("prompt"));
 
   window.addEventListener("error", (e) => hud.fail(e.message));
@@ -70,6 +72,11 @@ async function main() {
   const effectsStart = performance.now();
 
   const anchor = createAnchor(matte, splat.root);
+  hud.prompt("Loading original photograph…");
+  const memory = await createMemoryWindow({
+    anchor, splat, matte, config, button: activateButton,
+    onPhase: (phase) => hud.set({ memory: phase }),
+  });
   hud.prompt("Tap Start, then allow camera and motion access");
 
   let camera = null;
@@ -80,6 +87,7 @@ async function main() {
     const pose = anchorPoseFromCamera(camera);
     anchor.position.copy(pose.position);
     anchor.quaternion.copy(pose.quaternion);
+    memory.reset();
     anchor.visible = true;
     resetButton.hidden = false;
     hud.set({ placed: true });
@@ -88,6 +96,7 @@ async function main() {
 
   const reset = () => {
     anchor.visible = false;
+    memory.reset();
     resetButton.hidden = true;
     hud.set({ placed: false });
     hud.prompt(trackingPrompt(tracking, false));
@@ -103,7 +112,13 @@ async function main() {
       hud.set({ tracking: `${next.status}${next.reason ? ` (${next.reason})` : ""}` });
       if (!anchor.visible) hud.prompt(trackingPrompt(next, false));
     },
-    onBeforeRender: (xrCamera) => updateEffects(xrCamera, (performance.now() - effectsStart) / 1000),
+    onBeforeRender: (xrCamera) => {
+      const now = performance.now();
+      const frame = memory.update(xrCamera, canvas, now / 1000);
+      if (anchor.visible && frame.phase !== "dormant") {
+        updateEffects(xrCamera, (now - effectsStart) / 1000, frame.effects);
+      }
+    },
     onRendered: () => hud.tick(performance.now()),
     onView: (view) => hud.set({ view: formatView(view) }),
   });
@@ -124,8 +139,10 @@ async function main() {
   });
 
   resetButton.addEventListener("click", reset);
-  canvas.addEventListener("click", () => {
+  activateButton.addEventListener("click", () => memory.activate());
+  canvas.addEventListener("click", (event) => {
     if (!anchor.visible) place();
+    else if (camera && memory.hit(event, camera, canvas)) memory.activate();
   });
 }
 

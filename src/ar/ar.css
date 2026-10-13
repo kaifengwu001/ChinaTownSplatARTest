@@ -87,3 +87,22 @@ body {
 #credit a {
   color: inherit;
 }
+
+.memory-prompt {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  padding: 10px 16px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid rgba(255, 240, 214, 0.32);
+  border-radius: 24px;
+  background: rgba(15, 14, 12, 0.76);
+  color: #fff0d6;
+  font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.memory-prompt:focus-visible { outline: 2px solid #fff0d6; outline-offset: 4px; }
+.memory-prompt[hidden] { display: none; }

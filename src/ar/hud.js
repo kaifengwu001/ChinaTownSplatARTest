@@ -8,6 +8,7 @@ export function createHud(hudEl, promptEl) {
     splats: null,
     tracking: "starting",
     placed: false,
+    memory: "dormant",
     headroom: 0,
     fps: 0,
     view: "…",
@@ -21,6 +22,7 @@ export function createHud(hudEl, promptEl) {
       `splats   ${splats} (${fields.asset})`,
       `fps      ${fields.fps.toFixed(0)}`,
       `tracking ${fields.tracking}`,
+      `memory   ${fields.memory}`,
       `headroom ${fields.headroom.toFixed(1)}°`,
       `view     ${fields.view}`,
     ].join("\n");
