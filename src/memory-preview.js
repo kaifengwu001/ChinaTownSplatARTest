@@ -33,7 +33,7 @@ async function main() {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   const scene = new THREE.Scene();
-  scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true }));
+  scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true, sortRadial: true }));
   const camera = new THREE.PerspectiveCamera(29, 1, 0.05, 5000);
   const matte = createMatte({ occluder: true });
   const splat = await loadSplatScene(ASSETS[asset], { covSplats: true });

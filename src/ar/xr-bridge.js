@@ -90,7 +90,7 @@ export function createThreeBridge({
       renderer.autoClear = false;
 
       const scene = new THREE.Scene();
-      scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true }));
+      scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true, sortRadial: true }));
 
       // Starting pose must match the origin handed to 8th Wall below, so the
       // tracked world and our scene share one frame.

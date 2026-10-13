@@ -13,11 +13,12 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     meshFromAnchor: dyno.dynoMat4(new THREE.Matrix4()),
     anchorFromMesh: dyno.dynoMat4(new THREE.Matrix4()),
     eye: dyno.dynoVec3(new THREE.Vector3()),
+    sheetRadius: dyno.dynoFloat(d),
     centerY: dyno.dynoFloat(0), stretch: dyno.dynoFloat(settings.depthStretch),
     parallax: dyno.dynoFloat(settings.parallaxGain),
   };
   const modifier = dyno.dyno({
-    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", centerY: "float", stretch: "float", parallax: "float" },
+    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", centerY: "float", stretch: "float", parallax: "float" },
     outTypes: { covsplat: dyno.CovSplat }, inputs: u,
     globals: () => [dyno.defineCovSplat, MEMORY_WAVE_GLSL],
     statements: ({ inputs: i, outputs: o }) => [/* glsl */ `
@@ -59,14 +60,40 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         vec3 rayYDerivative = ay/baseDepth + base.y/(baseDepth*baseDepth)*az
           + cameraShear.y*${d}/(targetDepth*targetDepth)*targetDepthDerivative;
 
-        float sheetDepth = ${d}+0.006;
         surfaceXY.y += ${i.centerY};
         float t = ${i.motion};
+        float sheetDepth = ${d}+0.006;
+        vec3 sheetDepthDerivative = vec3(0.0);
+        vec2 sheetRay = vec2(0.0);
+        vec3 sheetDX = vec3(0.0), sheetDY = vec3(0.0);
+        // The shell is only needed during activation, not in the final scene.
+        if (t < 1.0) {
+          // A coplanar sheet loses the capture's foreground/background ordering:
+          // Spark sorts by camera distance, so the wrong splats cover each other.
+          // Place each flat splat along the viewing ray through its sheet pixel,
+          // on a shallow camera-centered shell ordered by ORIGINAL distance.
+          // Its screen position and footprint still match the anchored flat photo.
+          vec3 sheetPoint = vec3(surfaceXY,-${d}-0.006);
+          vec3 sheetDelta = sheetPoint-${i.eye};
+          float sheetLength = max(length(sheetDelta),0.001);
+          vec3 sheetDirection = sheetDelta/sheetLength;
+          float sourceDistance = max(length(p),0.001);
+          float shellRadius = ${i.sheetRadius}+0.01*log(1.0+sourceDistance);
+          vec3 radiusDerivative = 0.01*p/(sourceDistance*(1.0+sourceDistance));
+          mat3 flatJ = mat3(vec3(focal.x/z,0.0,0.0),vec3(0.0,-focal.y/z,0.0),
+            vec3(-focal.x*p.x/(z*z),focal.y*p.y/(z*z),0.0));
+          mat3 shellJ = shellRadius/sheetLength*(mat3(1.0)-outerProduct(sheetDirection,sheetDirection))*flatJ
+            + outerProduct(sheetDirection,radiusDerivative);
+          vec3 sheet = ${i.eye}+shellRadius*sheetDirection;
+          sheetDepth = max(-sheet.z,0.01);
+          sheetDepthDerivative = -vec3(shellJ[0].z,shellJ[1].z,shellJ[2].z);
+          sheetRay = sheet.xy/sheetDepth;
+          sheetDX = (vec3(shellJ[0].x,shellJ[1].x,shellJ[2].x)-sheetRay.x*sheetDepthDerivative)/sheetDepth;
+          sheetDY = (vec3(shellJ[0].y,shellJ[1].y,shellJ[2].y)-sheetRay.y*sheetDepthDerivative)/sheetDepth;
+        }
         float depth = mix(sheetDepth,targetDepth,t);
-        vec3 depthDerivative = t*targetDepthDerivative;
-        vec2 ray = mix(surfaceXY/sheetDepth,targetRay,t);
-        vec3 sheetDX = vec3(focal.x/(z*sheetDepth),0.0,-focal.x*p.x/(z*z*sheetDepth));
-        vec3 sheetDY = vec3(0.0,-focal.y/(z*sheetDepth),focal.y*p.y/(z*z*sheetDepth));
+        vec3 depthDerivative = mix(sheetDepthDerivative,targetDepthDerivative,t);
+        vec2 ray = mix(sheetRay,targetRay,t);
         vec3 dx = depth*mix(sheetDX,rayXDerivative,t)+ray.x*depthDerivative;
         vec3 dy = depth*mix(sheetDY,rayYDerivative,t)+ray.y*depthDerivative;
         vec3 dz = -depthDerivative;
@@ -108,6 +135,17 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     const changed = !u.eye.value.equals(eye) || u.centerY.value !== centerY
       || u.stretch.value !== settings.depthStretch || u.parallax.value !== settings.parallaxGain;
     u.eye.value.copy(eye);
+    // Start the shell behind the furthest photo corner, keeping it behind the
+    // portal matte. Radius differences then encode depth, not pixel location.
+    if (frame.growth < 1) {
+      let sheetRadius = 0;
+      for (const x of [-photoWidth/2,photoWidth/2]) {
+        for (const y of [-photoHeight/2,photoHeight/2]) {
+          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,centerY+y-eye.y,-d-0.006-eye.z));
+        }
+      }
+      u.sheetRadius.value = sheetRadius+0.006;
+    }
     u.centerY.value = centerY;
     u.stretch.value = settings.depthStretch;
     u.parallax.value = settings.parallaxGain;
