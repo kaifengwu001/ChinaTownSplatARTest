@@ -4,7 +4,7 @@ import { SparkRenderer } from "@sparkjsdev/spark";
 const NEAR = 0.05;
 // SHARP's far content can sit tens of metres behind the capture point, and the
 // whole scene is scaled and pushed back further still.
-const FAR = 1000;
+const FAR = 5000; // Accommodate the configurable depth stretch, including far sky.
 
 /**
  * An 8th Wall camera pipeline module that renders our own three.js scene on
@@ -90,7 +90,7 @@ export function createThreeBridge({
       renderer.autoClear = false;
 
       const scene = new THREE.Scene();
-      scene.add(new SparkRenderer({ renderer }));
+      scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true }));
 
       // Starting pose must match the origin handed to 8th Wall below, so the
       // tracked world and our scene share one frame.

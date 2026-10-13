@@ -1,19 +1,35 @@
-// Both the photograph and the splats use this front. Keeping the reveal in
-// photograph UVs makes the wave match as the viewer walks around the window.
+// Physical photo coordinates keep the wave circular regardless of image aspect.
+// All three layers share this turbulent front: original, splats, particles.
 export const MEMORY_WAVE_GLSL = /* glsl */ `
-  float memoryRadius(vec2 uv, float seconds) {
-    vec2 p = uv * 2.0 - 1.0;
-    float r = length(p) * 0.70710678;
-    float angle = atan(p.y, p.x + 0.00001);
-    return r + min(r * 4.0, 1.0) * (
-      0.013 * sin(angle * 7.0 + seconds * 2.0) +
-      0.009 * sin(angle * 13.0 - seconds * 3.0));
+  float memoryHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float memoryNoise(vec2 p) {
+    vec2 cell = floor(p), f = fract(p);
+    f = f*f*(3.0-2.0*f);
+    return mix(mix(memoryHash(cell), memoryHash(cell+vec2(1.0,0.0)), f.x),
+      mix(memoryHash(cell+vec2(0.0,1.0)), memoryHash(cell+1.0), f.x), f.y);
+  }
+  float memoryFbm(vec2 p) {
+    return 0.57*memoryNoise(p) + 0.28*memoryNoise(p*2.03+8.1) + 0.15*memoryNoise(p*4.17-3.7);
+  }
+  vec2 memoryCoordinates(vec2 uv, vec2 photoSize) { return (uv-0.5)*photoSize / (0.5*length(photoSize)); }
+  float memoryRadius(vec2 uv, vec2 photoSize, float seconds) {
+    vec2 p = memoryCoordinates(uv, photoSize);
+    vec2 warp = vec2(memoryFbm(p*3.0+seconds*0.12), memoryFbm(p*3.0+9.2-seconds*0.16));
+    float turbulence = memoryFbm(p*7.0+warp*2.1+seconds*0.16)-0.5;
+    return length(p) + min(length(p)*4.0,1.0)*turbulence*0.31;
   }
   float memoryReveal(float radius, float progress) {
-    return smoothstep(radius - 0.055, radius + 0.055, progress * 1.16);
+    return smoothstep(radius-0.105, radius+0.105, progress*1.28);
   }
   float memoryFront(float radius, float progress) {
-    float d = (radius - progress * 1.16) / 0.065;
-    return exp(-d * d) * (1.0 - smoothstep(0.9, 1.0, progress));
+    float d = (radius-progress*1.28)/0.22;
+    return exp(-d*d) * smoothstep(-0.01,0.08,progress) * (1.0-smoothstep(0.86,1.0,progress));
+  }
+  vec3 memoryChromatic(vec2 p, float seconds) {
+    float h = memoryFbm(p*4.1+seconds*0.15);
+    vec3 cyan = vec3(0.18,0.83,0.94), pink = vec3(1.0,0.25,0.48);
+    vec3 violet = vec3(0.36,0.32,0.95), pearl = vec3(1.0,0.89,0.73);
+    return mix(mix(violet,cyan,smoothstep(0.18,0.48,h)),
+      mix(pink,pearl,smoothstep(0.64,0.88,h)),smoothstep(0.48,0.7,h));
   }
 `;

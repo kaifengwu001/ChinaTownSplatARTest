@@ -3,9 +3,10 @@ import { loadSplatScene, placeSplatScene } from "../splat-scene.js";
 import { attachEffects, readEnabledEffects } from "../splat-effects.js";
 import { createMatte, updateMatte } from "../window-rig.js";
 import { createThreeBridge } from "./xr-bridge.js";
-import { createAnchor, anchorPoseFromCamera } from "./placement.js";
+import { createAnchor, anchorPoseFromCamera, floorFromHits } from "./placement.js";
 import { createHud, trackingPrompt } from "./hud.js";
 import { createMemoryWindow } from "../memory-window.js";
+import { readMemorySettings } from "../memory-settings.js";
 
 // Selectable with ?splats=full|50|25. Half the splats is the default because
 // Spark's sort and 8th Wall's SLAM share the phone's CPU; full is the native
@@ -65,7 +66,7 @@ async function main() {
   hud.set({ asset: options.assetKey, headroom: geometry(config).headroomDeg });
   hud.prompt("Loading splats…");
 
-  const splat = await loadSplatScene(options.assetUrl);
+  const splat = await loadSplatScene(options.assetUrl, { covSplats: true });
   placeSplatScene(splat, config);
   hud.set({ splats: splat.splatCount });
   const updateEffects = attachEffects(splat.mesh, options.effects);
@@ -74,7 +75,7 @@ async function main() {
   const anchor = createAnchor(matte, splat.root);
   hud.prompt("Loading original photograph…");
   const memory = await createMemoryWindow({
-    anchor, splat, matte, config, button: activateButton,
+    anchor, splat, matte, config, button: activateButton, settings: readMemorySettings(window.location.search),
     onPhase: (phase) => hud.set({ memory: phase }),
   });
   hud.prompt("Tap Start, then allow camera and motion access");
@@ -82,11 +83,20 @@ async function main() {
   let camera = null;
   let tracking = { status: "", reason: "" };
 
-  const place = () => {
+  const place = (event) => {
     if (!camera || tracking.status !== "NORMAL") return;
+    const rect = canvas.getBoundingClientRect();
+    const hits = window.XR8.XrController.hitTest((event.clientX-rect.left)/rect.width,
+      (event.clientY-rect.top)/rect.height, ["DETECTED_SURFACE","ESTIMATED_SURFACE"]);
+    const floor = floorFromHits(hits,camera.position.y);
+    if (!floor) {
+      hud.prompt("Point at the floor, move slowly, then tap the floor to place the memory");
+      return;
+    }
     const pose = anchorPoseFromCamera(camera);
     anchor.position.copy(pose.position);
     anchor.quaternion.copy(pose.quaternion);
+    memory.setFloor(floor.position.y-pose.position.y);
     memory.reset();
     anchor.visible = true;
     resetButton.hidden = false;
@@ -116,7 +126,7 @@ async function main() {
       const now = performance.now();
       const frame = memory.update(xrCamera, canvas, now / 1000);
       if (anchor.visible && frame.phase !== "dormant") {
-        updateEffects(xrCamera, (now - effectsStart) / 1000, frame.effects);
+        updateEffects(memory.effectsCamera(xrCamera), (now - effectsStart) / 1000, frame.effects);
       }
     },
     onRendered: () => hud.tick(performance.now()),
@@ -141,7 +151,7 @@ async function main() {
   resetButton.addEventListener("click", reset);
   activateButton.addEventListener("click", () => memory.activate());
   canvas.addEventListener("click", (event) => {
-    if (!anchor.visible) place();
+    if (!anchor.visible) place(event);
     else if (camera && memory.hit(event, camera, canvas)) memory.activate();
   });
 }

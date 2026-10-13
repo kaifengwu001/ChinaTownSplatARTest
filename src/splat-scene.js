@@ -20,8 +20,8 @@ import { SplatMesh } from "@sparkjsdev/spark";
  * translating the scene vertically would shear near and far content by
  * different angles and break the perspective.
  */
-export async function loadSplatScene(url) {
-  const mesh = new SplatMesh({ url });
+export async function loadSplatScene(url, { covSplats = false } = {}) {
+  const mesh = new SplatMesh({ url, covSplats, extSplats: covSplats });
   await mesh.initialized;
   mesh.rotation.x = Math.PI;
 

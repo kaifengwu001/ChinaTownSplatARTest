@@ -9,4 +9,28 @@ export const MEMORY_SETTINGS = Object.freeze({
   colorDuration: 2.7,
   flatHoldDuration: 0.35,
   depthDuration: 3.1,
+  photoScale: 0.5,
+  portalWidthScale: 1.5,
+  portalHeightScale: 2.5,
+  depthStretch: 2,
+  parallaxGain: 2,
 });
+
+export function readMemorySettings(search) {
+  const params = new URLSearchParams(search);
+  const settings = { ...MEMORY_SETTINGS };
+  for (const [key, min, max] of [["depthStretch", 0.5, 4], ["parallaxGain", 1, 4]]) {
+    if (!params.has(key)) continue;
+    const value = Number(params.get(key));
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`?${key} must be between ${min} and ${max}`);
+    settings[key] = value;
+  }
+  return settings;
+}
+
+export function memoryDimensions(config, aspect, settings = MEMORY_SETTINGS) {
+  const photoWidth = config.windowWidth * settings.photoScale;
+  return { photoWidth, photoHeight: photoWidth / aspect,
+    portalWidth: config.windowWidth * settings.portalWidthScale,
+    portalHeight: config.windowHeight * settings.portalHeightScale };
+}
