@@ -18,7 +18,22 @@ input[type="range"] { accent-color: #d8b879; cursor: pointer; }
 #viewpoint, #depth-stretch, #parallax-gain, #flat-effects { width: 45%; }
 .view-label { gap: 12px; }
 .view-label output { margin-left: auto; color: #e9decb; min-width: 30px; }
-#error { color: #ffb7a8; }
+#error { position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: 24px; right: 24px; padding: 12px; color: #ffb7a8; background: #151919f5; z-index: 3; }
+#particle-flow { position: fixed; top: max(24px, env(safe-area-inset-top)); right: 24px; width: 280px; padding: 16px; border: 1px solid #ffffff20; border-radius: 16px; background: #151919f5; color: #e9decb; max-height: calc(100dvh - 80px); overflow-y: auto; }
+#particle-flow summary { cursor: pointer; font-size: 13px; }
+#particle-flow[open] summary { margin-bottom: 14px; }
+.flow-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.flow-actions button { padding: 6px 10px; border: 1px solid #ffffff30; border-radius: 16px; background: transparent; color: #e9decb; cursor: pointer; font-size: 11px; }
+.flow-actions button[aria-pressed="true"] { border-color: #d8b879; background: #d8b87920; }
+.flow-hint { font-size: 11px; line-height: 1.45; color: #82918f; margin: 12px 0; }
+#flow-sliders { padding: 0; border: 0; margin: 0; min-width: 0; }
+.flow-label { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 12px; color: #b9c2c1; font-size: 11px; margin-top: 13px; }
+.flow-label output { color: #e9decb; font-variant-numeric: tabular-nums; }
+.flow-label input { grid-column: 1 / -1; width: 100%; margin: 0; }
+@media (max-width: 1100px) {
+  #preview-controls { max-height: 44dvh; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; width: min(460px, calc(100vw - 32px)); }
+  #preview-controls #particle-flow { position: static; width: auto; max-height: none; overflow: visible; margin-top: 14px; padding: 14px 0 0; border: 0; border-top: 1px solid #ffffff20; border-radius: 0; background: transparent; }
+}
 @media (max-width: 600px) {
   header { top: max(22px, env(safe-area-inset-top)); left: 22px; }
   h1 { font-size: 26px; }

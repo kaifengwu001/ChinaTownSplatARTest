@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { MEMORY_SETTINGS, memoryDimensions } from "./memory-settings.js";
+import { MEMORY_SETTINGS, PARTICLE_FLOW_PARAMETERS, memoryDimensions, validateParticleFlow } from "./memory-settings.js";
 import { memoryDuration, memoryFrame, ambientEffectStrength } from "./memory-timeline.js";
 import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 import { attachMemoryModifier } from "./memory-splat.js";
@@ -18,7 +18,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   const { photoWidth, photoHeight, portalWidth, portalHeight } = dimensions;
   updateMatte(matte, { ...config, windowWidth: photoWidth, windowHeight: photoHeight });
   const material = new THREE.ShaderMaterial({
-    uniforms: { photograph: { value: texture }, colorImage: { value: colorTexture }, photoSize: { value: new THREE.Vector2(photoWidth,photoHeight) }, progress: { value: -0.15 }, seconds: { value: 0 } },
+    uniforms: { photograph: { value: texture }, colorImage: { value: colorTexture }, photoSize: { value: new THREE.Vector2(photoWidth,photoHeight) }, progress: { value: -0.15 }, seconds: { value: 0 },
+      ...Object.fromEntries(["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"].map(key => [key,{value:settings[key]}])) },
     vertexShader: /* glsl */ `
       varying vec2 photoUv;
       void main() {
@@ -32,15 +33,17 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       uniform float progress;
       uniform float seconds;
       uniform vec2 photoSize;
+      uniform float rippleDiameter, transitionWidth, flowStrength, flowSpeed, rippleTurbulence;
       varying vec2 photoUv;
       ${MEMORY_WAVE_GLSL}
       void main() {
-        float radius = memoryRadius(photoUv, photoSize, seconds);
-        float front = memoryFront(radius, progress);
+        float flowTime = seconds*flowSpeed;
+        float radius = memoryRadius(photoUv, photoSize, flowTime, rippleTurbulence);
+        float front = memoryFront(radius, progress, rippleDiameter, transitionWidth);
         vec2 field = memoryCoordinates(photoUv,photoSize);
-        vec2 flow = vec2(memoryFbm(field*9.0+seconds*0.8)-0.5,memoryFbm(field*8.0+7.3-seconds*0.6)-0.5);
-        vec2 uv = clamp(photoUv+flow*front*0.014,0.0,1.0);
-        vec2 split = normalize(field+vec2(0.00001))*front*0.003;
+        vec2 flow = vec2(memoryFbm(field*9.0+flowTime*0.8)-0.5,memoryFbm(field*8.0+7.3-flowTime*0.6)-0.5);
+        vec2 uv = clamp(photoUv+flow*front*flowStrength*0.014,0.0,1.0);
+        vec2 split = normalize(field+vec2(0.00001))*front*flowStrength*0.003;
         vec3 original = texture2D(photograph,uv).rgb;
         float gray = dot(original, vec3(0.2126, 0.7152, 0.0722));
         // Chromatic refraction samples nearby channels of the restored image,
@@ -49,7 +52,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
           texture2D(colorImage,uv).g,texture2D(colorImage,clamp(uv-split,0.0,1.0)).b);
         float grain = memoryNoise(photoUv*vec2(350.0,230.0)+seconds*0.25);
         vec3 activated = mix(vec3(gray),rgb*(0.9+grain*0.25),front*0.85);
-        gl_FragColor = vec4(activated, 1.0-memoryReveal(radius,progress));
+        gl_FragColor = vec4(activated, 1.0-memoryReveal(radius,progress,rippleDiameter,transitionWidth));
         #include <colorspace_fragment>
       }
     `,
@@ -64,7 +67,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   anchor.add(photo);
 
   const updateSplats = attachMemoryModifier(splat.mesh, anchor, config, dimensions, settings);
-  const particles = createMemoryParticles(photoWidth, photoHeight, config.windowDistance, colorTexture);
+  const particles = createMemoryParticles(photoWidth, photoHeight, config.windowDistance, colorTexture, settings);
   anchor.add(particles.points);
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -87,6 +90,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     frame = { ...frame, effects: ambientEffectStrength(frame,settings.flatEffectStrength) };
     material.uniforms.progress.value = frame.color;
     material.uniforms.seconds.value = frame.seconds;
+    for (const key of ["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"]) material.uniforms[key].value=settings[key];
     photo.visible = frame.color < 1;
     splat.root.visible = frame.phase !== "dormant";
     const height = THREE.MathUtils.lerp(photoHeight, portalHeight, frame.growth);
@@ -164,6 +168,13 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     setFlatEffectStrength(value) {
       if (!Number.isFinite(value) || value<0 || value>1) throw new Error("Flat effect strength must be between 0 and 1");
       settings.flatEffectStrength=value;
+    },
+    setParticleFlow(values) {
+      const keys = PARTICLE_FLOW_PARAMETERS.map(({ key }) => key);
+      for (const key of Object.keys(values)) if (!keys.includes(key)) throw new Error(`Unknown particle flow parameter: ${key}`);
+      const next = { ...settings, ...values };
+      validateParticleFlow(next);
+      Object.assign(settings,values);
     },
     activate(now = performance.now() / 1000) {
       if (!anchor.visible || phase !== "dormant") return false;

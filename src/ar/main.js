@@ -53,7 +53,9 @@ async function main() {
   const startButton = document.getElementById("start");
   const resetButton = document.getElementById("reset");
   const activateButton = document.getElementById("activate-memory");
-  const hud = createHud(document.getElementById("hud"), document.getElementById("prompt"));
+  const hud = createHud(document.getElementById("hud"), document.getElementById("prompt"), {
+    debug: new URLSearchParams(window.location.search).get("debug") === "1",
+  });
 
   window.addEventListener("error", (e) => hud.fail(e.message));
   window.addEventListener("unhandledrejection", (e) => hud.fail(e.reason?.message ?? String(e.reason)));
@@ -147,6 +149,7 @@ async function main() {
       hud.fail(err?.message ?? String(err));
     }
   });
+  startButton.disabled = false;
 
   resetButton.addEventListener("click", reset);
   activateButton.addEventListener("click", () => memory.activate());

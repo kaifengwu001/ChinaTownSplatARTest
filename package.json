@@ -8,6 +8,7 @@
     "dev": "vite",
     "prebuild": "npm run xr:copy",
     "build": "vite build",
+    "vercel:prepare": "node scripts/prepare_vercel.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

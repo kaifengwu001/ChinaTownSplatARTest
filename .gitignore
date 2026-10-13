@@ -9,3 +9,5 @@ vendor-metalsplatter/
 ios/Resources/*.spz
 public/external/
 dist/
+.vercel
+.env*

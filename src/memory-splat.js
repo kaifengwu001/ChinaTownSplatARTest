@@ -16,9 +16,11 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     sheetRadius: dyno.dynoFloat(d),
     centerY: dyno.dynoFloat(0), stretch: dyno.dynoFloat(settings.depthStretch),
     parallax: dyno.dynoFloat(settings.parallaxGain),
+    ...Object.fromEntries(["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"].map(key => [key,dyno.dynoFloat(settings[key])])),
   };
   const modifier = dyno.dyno({
-    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", centerY: "float", stretch: "float", parallax: "float" },
+    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", centerY: "float", stretch: "float", parallax: "float",
+      rippleDiameter: "float", transitionWidth: "float", flowStrength: "float", flowSpeed: "float", rippleTurbulence: "float" },
     outTypes: { covsplat: dyno.CovSplat }, inputs: u,
     globals: () => [dyno.defineCovSplat, MEMORY_WAVE_GLSL],
     statements: ({ inputs: i, outputs: o }) => [/* glsl */ `
@@ -31,13 +33,14 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         vec2 uv = surfaceXY/vec2(${photoWidth},${photoHeight})+0.5;
         float front = 0.0, reveal = 1.0;
         if (${i.color} < 1.0) {
-          float radius = memoryRadius(uv, vec2(${photoWidth},${photoHeight}), ${i.seconds});
-          front = memoryFront(radius, ${i.color});
-          reveal = memoryReveal(radius, ${i.color});
+          float flowTime = ${i.seconds}*${i.flowSpeed};
+          float radius = memoryRadius(uv, vec2(${photoWidth},${photoHeight}), flowTime, ${i.rippleTurbulence});
+          front = memoryFront(radius, ${i.color}, ${i.rippleDiameter}, ${i.transitionWidth});
+          reveal = memoryReveal(radius, ${i.color}, ${i.rippleDiameter}, ${i.transitionWidth});
           vec2 field = memoryCoordinates(uv, vec2(${photoWidth},${photoHeight}));
-          vec2 flow = vec2(memoryFbm(field*9.0+${i.seconds}*0.8)-0.5,
-            memoryFbm(field*8.0+7.3-${i.seconds}*0.6)-0.5);
-          surfaceXY += flow*front*0.009;
+          vec2 flow = vec2(memoryFbm(field*9.0+flowTime*0.8)-0.5,
+            memoryFbm(field*8.0+7.3-flowTime*0.6)-0.5);
+          surfaceXY += flow*front*${i.flowStrength}*0.009;
           // Keep the reconstruction's own RGB through the ripple. Its ambient
           // brightness modulation is applied by the shared effect modifier.
         }
@@ -160,6 +163,7 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     u.centerY.value = centerY;
     u.stretch.value = settings.depthStretch;
     u.parallax.value = settings.parallaxGain;
+    for (const key of ["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"]) u[key].value=settings[key];
     u.color.value = frame.color;
     u.motion.value = frame.growth;
     u.seconds.value = frame.seconds;

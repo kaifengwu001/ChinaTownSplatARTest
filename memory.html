@@ -10,17 +10,29 @@
     <canvas id="view" aria-label="Interactive preview of a historical photograph becoming a 3D window"></canvas>
     <header><span class="eyebrow">PARALLAX WINDOW / WEBAR</span><h1>A memory, opening.</h1><p>Tap the photograph to bring the street back to life.</p></header>
     <button id="activate-memory" class="memory-prompt" type="button" hidden>tap to activate memory</button>
-    <section id="preview-controls" aria-label="Animation preview controls">
+    <section id="preview-controls" aria-label="Animation preview controls" hidden>
       <div class="control-heading"><span id="stage" role="status">Loading the memory…</span><button id="replay" type="button" disabled>Replay</button></div>
       <label class="timeline-label" for="timeline">Activation <output id="time">0.0s</output></label>
       <input id="timeline" type="range" min="0" max="6.15" value="0" step="0.01" disabled />
       <div class="stages"><span>Original</span><span>Color</span><span>Depth</span></div>
+      <div id="scene-controls">
       <label class="view-label" for="viewpoint">Glance sideways <input id="viewpoint" type="range" min="-0.35" max="0.35" value="0" step="0.01" disabled /></label>
       <label class="view-label" for="depth-stretch">Depth stretch <output id="depth-value">2.0×</output><input id="depth-stretch" type="range" min="0.5" max="4" value="2" step="0.1" disabled /></label>
-      <label class="view-label" for="parallax-gain">Parallax strength <output id="parallax-value">2.0×</output><input id="parallax-gain" type="range" min="1" max="4" value="2" step="0.1" disabled /></label>
-      <label class="view-label" for="flat-effects">Flat dream effects <output id="flat-effects-value">25%</output><input id="flat-effects" type="range" min="0" max="1" value="0.25" step="0.05" disabled /></label>
-      <p id="error" role="alert" hidden></p>
+      <label class="view-label" for="parallax-gain">Parallax strength <output id="parallax-value">1.0×</output><input id="parallax-gain" type="range" min="1" max="4" value="1" step="0.1" disabled /></label>
+      <label class="view-label" for="flat-effects">Flat dream effects <output id="flat-effects-value">100%</output><input id="flat-effects" type="range" min="0" max="1" value="1" step="0.05" disabled /></label>
+      </div>
     </section>
+    <p id="error" role="alert" hidden></p>
+    <details id="particle-flow" open hidden>
+      <summary>Particle flow</summary>
+      <div class="flow-actions">
+        <button id="ripple-preview" type="button" disabled>Preview ripple</button>
+        <button id="flow-reset" type="button" disabled>Reset</button>
+        <button id="flow-copy" type="button" disabled>Copy link</button>
+      </div>
+      <p class="flow-hint">Diameter and width scale with the photo diagonal. Sizes are screen pixels. Flow speed controls swirling. Preview repeats the ripple while you tune.</p>
+      <fieldset id="flow-sliders" disabled aria-label="Particle flow settings"></fieldset>
+    </details>
     <script type="module" src="/src/memory-preview.js"></script>
   </body>
 </html>

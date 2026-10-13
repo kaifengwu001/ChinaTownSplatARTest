@@ -7,16 +7,20 @@ import { createMatte } from "./window-rig.js";
 import { createAnchor } from "./ar/placement.js";
 import { createMemoryWindow } from "./memory-window.js";
 import { readMemorySettings } from "./memory-settings.js";
+import { createMemoryFlowControls } from "./memory-flow-controls.js";
 
 const STAGES = { dormant: "A photograph, waiting", colorizing: "Color ripples across the surface", surface: "The reconstructed photograph", expanding: "The street opens into depth", active: "A window into the memory" };
 const ASSETS = { full: "/chop_suey.sog", 50: "/chop_suey_50.sog", 25: "/chop_suey_25.sog" };
 
 async function main() {
   const params = new URLSearchParams(window.location.search);
+  const showControls = params.get("controls") === "1";
+  document.getElementById("preview-controls").hidden = !showControls;
+  document.getElementById("particle-flow").hidden = !showControls;
   const asset = params.get("splats") ?? "50";
   if (!(asset in ASSETS)) throw new Error(`Unknown ?splats=${asset}`);
   // Hold the ambient sweep at the same phase for visual strength comparisons.
-  const frozenFxTime = params.has("fxTime") ? Number(params.get("fxTime")) : null;
+  let frozenFxTime = params.has("fxTime") ? Number(params.get("fxTime")) : null;
   if (frozenFxTime !== null && (!Number.isFinite(frozenFxTime) || frozenFxTime<0)) throw new Error("?fxTime must be a non-negative number of seconds");
   const canvas = document.getElementById("view");
   const timeline = document.getElementById("timeline");
@@ -48,6 +52,7 @@ async function main() {
   });
   anchor.visible = true;
   memory.setFloor(-1.5);
+  const flowControls = showControls ? createMemoryFlowControls(memory,settings,() => { frozenFxTime = null; }) : null;
   const floor = new THREE.GridHelper(10,40,0x405553,0x283b39);
   floor.position.y = -1.5;
   floor.renderOrder = -2;
@@ -85,6 +90,7 @@ async function main() {
     camera.position.x = Number(viewpoint.value);
     camera.lookAt(0, memory.portalCenterY-0.15, -DEFAULTS.windowDistance);
     const now = performance.now() / 1000;
+    flowControls?.update(now);
     const frame = memory.update(camera, canvas, now);
     // Only the review camera widens its view as the larger portal opens.
     // The phone AR camera always retains 8th Wall's calibrated projection.

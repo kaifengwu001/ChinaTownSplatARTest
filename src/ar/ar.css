@@ -11,6 +11,8 @@ body {
   touch-action: none;
 }
 
+[hidden] { display: none !important; }
+
 #camerafeed {
   position: fixed;
   inset: 0;

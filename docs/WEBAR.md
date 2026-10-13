@@ -7,14 +7,29 @@ The GitHub repository contains three implementations of a photograph reconstruct
 Run `npm install` if needed, then `npm run dev`. Vite serves HTTPS on port 5174 for phone camera and motion access. The engine copy step runs automatically and preserves the bundled 8th Wall engine and license.
 
 - `/ar.html`: phone experience. Start AR, allow camera/motion, move slowly until tracking is normal, then point at and tap the floor to place the photograph. Only horizontal tracked/estimated surface hits below the phone are accepted; feature points and tilted surfaces are rejected. Tap the photograph or **tap to activate memory** below it. Reset clears the placement and restores the original for the next placement.
-- `/memory.html`: camera-free preview of the **same** activation controller and splat modifier. Tap to play; use the timeline to inspect stages and the sideways slider to compare parallax. Replay restores the dormant photograph.
+- `/memory.html`: camera-free preview of the **same** activation controller and splat modifier. Tap to play. Tuning controls are hidden by default; add `?controls=1` for the timeline, scene controls, and particle-flow sliders. Replay restores the dormant photograph.
 - `/index.html`: existing camera/framing tuning preview.
 
-AR and memory preview accept `?splats=full|50|25` (default `50`) and `?fx=none|band|periphery|band,periphery`. AR also accepts `?dpr=1`. Memory preview accepts `?t=1.15` to freeze a stage on load and `?fxTime=3` to freeze the ambient sweep phase for comparisons.
+AR and memory preview accept `?splats=full|50|25` (default `50`) and `?fx=none|band|periphery|band,periphery`. AR also accepts `?dpr=1` and `?debug=1` to show tracking/render diagnostics. Diagnostics are hidden by default; camera, placement, activation, and error prompts remain available. Memory preview accepts `?t=1.15` to freeze a stage on load and `?fxTime=3` to freeze the ambient sweep phase for comparisons.
 
-Both pages accept `?depthStretch=2&parallaxGain=2`. Depth stretch ranges from 0.5 to 4; parallax strength ranges from 1 to 4. The memory preview also provides live sliders for both. Defaults are 2× each. Depth stretch doubles the distance behind the window plane while preserving the central composition; parallax strength exaggerates lateral/vertical viewer movement about that plane. Larger gains consume SHARP's limited viewing baseline faster, so its reconstruction quality still limits extreme viewpoints.
+Both pages accept `?depthStretch=2&parallaxGain=1`. Depth stretch ranges from 0.5 to 4; parallax strength ranges from 1 to 4. The memory preview also provides live sliders for both. Defaults are 2× depth stretch and 1× parallax strength. Depth stretch doubles the distance behind the window plane while preserving the central composition; parallax strength exaggerates lateral/vertical viewer movement about that plane. Larger gains consume SHARP's limited viewing baseline faster, so its reconstruction quality still limits extreme viewpoints.
 
-`?flatEffectStrength=0.25` scales dreamlike effect changes during the flat stage (range 0–1, default 25%). The **Flat dream effects** slider provides the same live control: 0% disables the flat-stage modulation and 100% reproduces the previous full-strength behavior. Size growth/shrinkage, brightness boost, and opacity reduction are interpolated from their neutral values, so reducing strength does not shrink or darken the base image. The gain smoothly reaches 100% as depth opens; the final 3D effect tuning is unaffected.
+`?flatEffectStrength=0.25` scales dreamlike effect changes during the flat stage (range 0–1, default 100%). The **Flat dream effects** slider provides the same live control: 0% disables the flat-stage modulation and 100% reproduces the previous full-strength behavior. Size growth/shrinkage, brightness boost, and opacity reduction are interpolated from their neutral values, so reducing strength does not shrink or darken the base image. The gain smoothly reaches 100% as depth opens; the final 3D effect tuning is unaffected.
+
+The **Particle flow** panel at `/memory.html?controls=1` provides eight live sliders. **Preview ripple** repeats just the color transition; **Pause ripple** holds its current frame. Scrubbing the activation timeline or pressing Replay ends the loop. Editing a slider while outside the color stage starts the ripple preview automatically. Reset restores only the flow settings, and Copy link saves a reproducible tuning URL with the current inspected frame and scene controls. On small screens the panel moves into the scrollable bottom card; collapse it to access the scene controls.
+
+| Parameter / URL key | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `particleCount` | 11,516 | 0–60,000 | Number of spray particles; 0 hides the spray. |
+| `particleSizeMin` | 3.4 px | 0.2–24 px | Smallest particle at the crest. |
+| `particleSizeMax` | 5.1 px | 0.2–24 px | Largest particle at the crest. |
+| `rippleDiameter` | 1.01 (101%) | 0.5–2.5 | Maximum circular ripple diameter relative to the photo diagonal. |
+| `transitionWidth` | 0.14 (14%) | 0.04–0.6 | Width of the particle crest and color reveal; scales with the photo diagonal. |
+| `flowStrength` | 0.35× | 0–3× | Amount of particle drift, lift, and surface refraction. |
+| `flowSpeed` | 1.55× | 0–3× | Speed of swirling and turbulence; the 2.7-second color sweep keeps its timing. |
+| `rippleTurbulence` | 1.75 (175%) | 0–2 | Irregularity of the circular front; 0 gives a smooth circle. |
+
+The size boundaries carry each other along when crossed so minimum never exceeds maximum. All eight URL parameters also work on `/ar.html`. The spray reuses a fixed particle buffer and changes its draw count; every density prefix covers the whole image. Diameter, width, strength, speed, and irregularity update the shared photograph/splat/particle wave together. Even a small diameter or broad transition finishes revealing the full photograph smoothly before expansion.
 
 ## Memory activation
 
@@ -25,7 +40,7 @@ Both pages accept `?depthStretch=2&parallaxGain=2`. Depth stretch ranges from 0.
 The stages are controlled by `src/memory-settings.js`:
 
 1. **Dormant:** full photograph at 0.2 m wide (half the previous width), preserving its proportions, with an instruction projected below the anchored image. The splat scene is hidden. The image and portal share a center 0.5 m above the selected floor.
-2. **Color (2.7 s):** a wide, irregular circular wave travels from the center in physical coordinates, independent of photo aspect. The photograph refracts and dissolves through its own restored colors; a 15,000-particle spray curls around the crest. The actual colored splats are revealed on a thin sheet behind the window. Ambient sweep/periphery effects begin with the first colored region at the configurable flat-stage strength.
+2. **Color (2.7 s):** a wide, irregular circular wave travels from the center in physical coordinates, independent of photo aspect. The photograph refracts and dissolves through its own restored colors; an 11,516-particle spray curls around the crest. The actual colored splats are revealed on a thin sheet behind the window. Ambient sweep/periphery effects begin with the first colored region at the configurable flat-stage strength.
 3. **Surface hold (0.35 s):** the colored reconstruction stays flat before opening.
 4. **Depth (3.1 s):** a quintic minimum-jerk curve starts slowly, accelerates, and slows to a stop. The aperture grows to **0.6 m wide × 1.0 m tall**, with its bottom exactly at the selected floor height. Splats move into the scene with configurable depth stretch and exaggerated parallax. Their inverse depth and image rays interpolate with the same eased progress as the aperture, so perceived depth develops gradually alongside the opening.
 
@@ -41,8 +56,12 @@ Flattening every splat onto exactly the same depth destroys its foreground/backg
 
 ## Build and delivery
 
-`npm run build` produces `dist/`, including the AR page, both previews, original photograph, and unmodified 8th Wall engine. SOG files under `public/` are currently ignored by Git and must also be available in the deployment environment. This feature uses the existing SOG assets; it does not regenerate them.
+`npm run build` produces `dist/`, including the AR page, both previews, original photograph, and unmodified 8th Wall engine. SOG files under `public/` are currently ignored by Git. This feature uses the existing SOG assets; it does not regenerate them.
 
-Desktop browser verification covers the shader compilation, all activation stages, tap hit testing, sideways viewing, reset/replay, and a 390×844 viewport. Actual mobile camera tracking, Safari rendering, and frame rate require a device check. GitHub sync and Vercel publication require the user's terminal login before those actions.
+The production project is `chinatown-splat-ar`, served at `https://chinatown-splat-ar.vercel.app`. Its root opens AR with the chosen defaults and a dormant photograph; the tuning URL's `t=0.86` inspection frame is not a playback default. `/ar.html` is also available directly.
 
-To check the flat/depth boundary, load `/memory.html?t=3&fxTime=3&flatEffectStrength=0.25` and scrub between 3.0 and 3.2 s. Also compare 3.05 and 3.06 s, immediately around expansion's start. Repeat with `&fx=none` to isolate splat ordering from ambient effects and use the sideways slider to check that the flat image stays anchored when the viewing direction changes.
+For a complete release, link the existing project with `vercel link --yes --project chinatown-splat-ar`, run `npm run vercel:prepare`, then `vercel deploy --prebuilt --prod`. The preparation script verifies all three local SOGs before building, copies only `dist/` into Vercel's static Build Output API structure, and routes `/` to `/ar.html`. This includes Git-ignored scene/engine assets without uploading source folders, local credentials, or development captures. A source-only/Git rebuild must supply the SOG assets separately. The packaged engine keeps its resources and license intact.
+
+Desktop browser verification covers the shader compilation, all activation stages, tap hit testing, sideways viewing, reset/replay, and a 390×844 viewport. Actual mobile camera tracking, Safari rendering, and frame rate require a device check. Existing GitHub and Vercel terminal sessions are used for sync and publication; only an expired or missing login needs user interaction.
+
+To check the flat/depth boundary, load `/memory.html?controls=1&t=3&fxTime=3&flatEffectStrength=0.25` and scrub between 3.0 and 3.2 s. Also compare 3.05 and 3.06 s, immediately around expansion's start. Repeat with `&fx=none` to isolate splat ordering from ambient effects and use the sideways slider to check that the flat image stays anchored when the viewing direction changes.

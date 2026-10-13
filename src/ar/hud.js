@@ -1,8 +1,8 @@
 /**
- * On-screen readout and centre prompt. The phone has no devtools console, so
- * everything worth knowing, including errors, has to be visible here.
+ * Optional diagnostic readout and always-visible placement/error prompts.
  */
-export function createHud(hudEl, promptEl) {
+export function createHud(hudEl, promptEl, { debug = false } = {}) {
+  hudEl.hidden = !debug;
   let fields = Object.freeze({
     asset: "",
     splats: null,
@@ -17,6 +17,7 @@ export function createHud(hudEl, promptEl) {
   let lastPaint = 0;
 
   const paint = () => {
+    if (!debug) return;
     const splats = fields.splats == null ? "…" : fields.splats.toLocaleString();
     hudEl.textContent = [
       `splats   ${splats} (${fields.asset})`,
@@ -37,6 +38,7 @@ export function createHud(hudEl, promptEl) {
     // Rolling one-second frame rate; repainting the DOM every frame would cost
     // more than the readout is worth, so paint at most twice a second.
     tick(now) {
+      if (!debug) return;
       frames = [...frames.filter((t) => now - t < 1000), now];
       if (now - lastPaint < 500) return;
       lastPaint = now;
