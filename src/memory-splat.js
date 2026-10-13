@@ -93,6 +93,17 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         }
         float depth = mix(sheetDepth,targetDepth,t);
         vec3 depthDerivative = mix(sheetDepthDerivative,targetDepthDerivative,t);
+        if (t > 0.0 && t < 1.0) {
+          // Perspective responds to inverse depth. Blending metres sends far
+          // content away almost instantly while the aperture barely grows.
+          // Match apparent depth/parallax to the same eased progress as the
+          // aperture and image rays; retain the exact flat and 3D endpoints.
+          depth = 1.0/mix(1.0/sheetDepth,1.0/targetDepth,t);
+          // Differentiate the new depth mapping too, so Gaussian footprints
+          // follow their centers without introducing holes or a size jump.
+          depthDerivative = depth*depth*((1.0-t)*sheetDepthDerivative/(sheetDepth*sheetDepth)
+            + t*targetDepthDerivative/(targetDepth*targetDepth));
+        }
         vec2 ray = mix(sheetRay,targetRay,t);
         vec3 dx = depth*mix(sheetDX,rayXDerivative,t)+ray.x*depthDerivative;
         vec3 dy = depth*mix(sheetDY,rayYDerivative,t)+ray.y*depthDerivative;
