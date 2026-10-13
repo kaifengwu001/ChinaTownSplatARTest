@@ -4,6 +4,7 @@ import { memoryDuration, memoryFrame, ambientEffectStrength } from "./memory-tim
 import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 import { attachMemoryModifier } from "./memory-splat.js";
 import { createMemoryParticles } from "./memory-particles.js";
+import { memoryPlacement } from "./memory-placement.js";
 import { updateMatte } from "./window-rig.js";
 
 export async function createMemoryWindow({ anchor, splat, matte, config, button, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
@@ -62,12 +63,12 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     toneMapped: false,
   });
   const photo = new THREE.Mesh(new THREE.PlaneGeometry(photoWidth, photoHeight), material);
-  photo.position.z = -config.windowDistance;
+  photo.position.z = -settings.photoDistance;
   photo.renderOrder = 1;
   anchor.add(photo);
 
   const updateSplats = attachMemoryModifier(splat.mesh, anchor, config, dimensions, settings);
-  const particles = createMemoryParticles(photoWidth, photoHeight, config.windowDistance, colorTexture, settings);
+  const particles = createMemoryParticles(photoWidth, photoHeight, settings.photoDistance, colorTexture, settings);
   anchor.add(particles.points);
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -95,14 +96,16 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     splat.root.visible = frame.phase !== "dormant";
     const height = THREE.MathUtils.lerp(photoHeight, portalHeight, frame.growth);
     const width = THREE.MathUtils.lerp(photoWidth, portalWidth, frame.growth);
+    const placement = memoryPlacement(frame.growth, config, dimensions, settings, floorY);
     // Scaling the matte also scales its rectangular hole; this avoids building
     // and discarding geometry on every frame of the height animation.
     matte.scale.y = height / photoHeight;
     matte.scale.x = width / photoWidth;
-    matte.position.y = floorY+portalHeight/2;
-    photo.position.y = matte.position.y;
-    updateSplats(frame, camera, floorY+portalHeight/2);
-    particles.update(frame,dpr,matte.position.y);
+    matte.position.set(0, placement.centerY, -placement.distance);
+    photo.position.copy(matte.position);
+    updateSplats(frame, camera, placement.targetCenterY);
+    // The ripple finishes on the original plane before spatial expansion.
+    particles.update(frame,dpr,0);
     if (phase !== frame.phase) {
       phase = frame.phase;
       onPhase(phase);
@@ -117,7 +120,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     // instruction over the image or at an unrelated screen-fixed location.
     camera.updateWorldMatrix(true, false);
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    labelPoint.set(0, floorY+portalHeight/2-photoHeight/2-0.045, -config.windowDistance);
+    labelPoint.set(0, -photoHeight/2-0.045, -settings.photoDistance);
     anchor.localToWorld(labelPoint);
     cameraPoint.copy(labelPoint).applyMatrix4(camera.matrixWorldInverse);
     labelPoint.project(camera);
@@ -135,7 +138,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     get frame() { return frame; },
     duration: memoryDuration(settings),
     dimensions,
-    get portalCenterY() { return floorY+portalHeight/2; },
+    get portalCenterY() { return memoryPlacement(frame.growth, config, dimensions, settings, floorY).centerY; },
+    get portalDistance() { return memoryPlacement(frame.growth, config, dimensions, settings, floorY).distance; },
     effectsCamera(camera) {
       // Ambient effects are evaluated in capture space. Undo the floor shift
       // in their viewing direction so the sharp center follows the memory,
@@ -143,7 +147,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       effectsForward.set(0,0,-1).transformDirection(camera.matrixWorld);
       effectsPose.copy(anchor.matrixWorld).invert();
       effectsForward.transformDirection(effectsPose);
-      effectsForward.y += (floorY+portalHeight/2)/config.windowDistance*effectsForward.z;
+      const targetCenterY = floorY + settings.portalBottomHeight + portalHeight/2;
+      effectsForward.y += targetCenterY/config.windowDistance*effectsForward.z;
       effectsForward.normalize().transformDirection(anchor.matrixWorld);
       captureForward.set(0,0,1).transformDirection(splat.mesh.matrixWorld);
       effectsForward.lerpVectors(captureForward,effectsForward,frame.growth).normalize();
@@ -200,6 +205,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       positionButton(camera, canvas);
       return frame;
     },
+    updatePrompt: positionButton,
     hit(event, camera, canvas) {
       if (phase !== "dormant" || !anchor.visible) return false;
       const rect = canvas.getBoundingClientRect();

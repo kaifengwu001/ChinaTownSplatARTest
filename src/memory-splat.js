@@ -8,12 +8,13 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
   const focalX = photoWidth * settings.captureFocalRatio;
   const focalY = focalX * photoHeight / (photoWidth / settings.captureAspect);
   const d = config.windowDistance;
+  const photoDistance = settings.photoDistance;
   const u = {
     color: dyno.dynoFloat(-0.15), motion: dyno.dynoFloat(0), seconds: dyno.dynoFloat(0),
     meshFromAnchor: dyno.dynoMat4(new THREE.Matrix4()),
     anchorFromMesh: dyno.dynoMat4(new THREE.Matrix4()),
     eye: dyno.dynoVec3(new THREE.Vector3()),
-    sheetRadius: dyno.dynoFloat(d),
+    sheetRadius: dyno.dynoFloat(photoDistance),
     centerY: dyno.dynoFloat(0), stretch: dyno.dynoFloat(settings.depthStretch),
     parallax: dyno.dynoFloat(settings.parallaxGain),
     ...Object.fromEntries(["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"].map(key => [key,dyno.dynoFloat(settings[key])])),
@@ -63,9 +64,8 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         vec3 rayYDerivative = ay/baseDepth + base.y/(baseDepth*baseDepth)*az
           + cameraShear.y*${d}/(targetDepth*targetDepth)*targetDepthDerivative;
 
-        surfaceXY.y += ${i.centerY};
         float t = ${i.motion};
-        float sheetDepth = ${d}+0.006;
+        float sheetDepth = ${photoDistance}+0.006;
         vec3 sheetDepthDerivative = vec3(0.0);
         vec2 sheetRay = vec2(0.0);
         vec3 sheetDX = vec3(0.0), sheetDY = vec3(0.0);
@@ -76,7 +76,8 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
           // Place each flat splat along the viewing ray through its sheet pixel,
           // on a shallow camera-centered shell ordered by ORIGINAL distance.
           // Its screen position and footprint still match the anchored flat photo.
-          vec3 sheetPoint = vec3(surfaceXY,-${d}-0.006);
+          // The original plane is at placement-time phone height (local y=0).
+          vec3 sheetPoint = vec3(surfaceXY,-${photoDistance}-0.006);
           vec3 sheetDelta = sheetPoint-${i.eye};
           float sheetLength = max(length(sheetDelta),0.001);
           vec3 sheetDirection = sheetDelta/sheetLength;
@@ -155,7 +156,7 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
       let sheetRadius = 0;
       for (const x of [-photoWidth/2,photoWidth/2]) {
         for (const y of [-photoHeight/2,photoHeight/2]) {
-          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,centerY+y-eye.y,-d-0.006-eye.z));
+          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,y-eye.y,-photoDistance-0.006-eye.z));
         }
       }
       u.sheetRadius.value = sheetRadius+0.006;

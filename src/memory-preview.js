@@ -88,18 +88,20 @@ async function main() {
   }
   renderer.setAnimationLoop(() => {
     camera.position.x = Number(viewpoint.value);
-    camera.lookAt(0, memory.portalCenterY-0.15, -DEFAULTS.windowDistance);
     const now = performance.now() / 1000;
     flowControls?.update(now);
     const frame = memory.update(camera, canvas, now);
+    camera.lookAt(0, memory.portalCenterY-0.15, -memory.portalDistance);
     // Only the review camera widens its view as the larger portal opens.
     // The phone AR camera always retains 8th Wall's calibrated projection.
     // Geometry and camera framing use the same frame's progress.
     const growth = frame.growth;
     const halfView = THREE.MathUtils.lerp(0.36,0.68,growth);
     const nextFov = THREE.MathUtils.radToDeg(2*Math.atan(Math.max(halfView,
-      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect)/DEFAULTS.windowDistance));
+      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect)/memory.portalDistance));
     if (camera.fov!==nextFov) { camera.fov=nextFov; camera.updateProjectionMatrix(); }
+    camera.updateWorldMatrix(true, false);
+    memory.updatePrompt(camera, canvas);
     if (frame.phase !== "dormant") updateEffects(memory.effectsCamera(camera), frozenFxTime ?? now, frame.effects);
     timeline.value = Math.min(frame.seconds, memory.duration);
     time.textContent = `${Math.min(frame.seconds, memory.duration).toFixed(1)}s`;
