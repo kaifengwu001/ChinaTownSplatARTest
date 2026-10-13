@@ -25,11 +25,4 @@ export const MEMORY_WAVE_GLSL = /* glsl */ `
     float d = (radius-progress*1.28)/0.22;
     return exp(-d*d) * smoothstep(-0.01,0.08,progress) * (1.0-smoothstep(0.86,1.0,progress));
   }
-  vec3 memoryChromatic(vec2 p, float seconds) {
-    float h = memoryFbm(p*4.1+seconds*0.15);
-    vec3 cyan = vec3(0.18,0.83,0.94), pink = vec3(1.0,0.25,0.48);
-    vec3 violet = vec3(0.36,0.32,0.95), pearl = vec3(1.0,0.89,0.73);
-    return mix(mix(violet,cyan,smoothstep(0.18,0.48,h)),
-      mix(pink,pearl,smoothstep(0.64,0.88,h)),smoothstep(0.48,0.7,h));
-  }
 `;

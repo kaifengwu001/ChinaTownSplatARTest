@@ -9,6 +9,11 @@ export const ease = (value) => { const t = clamp(value); return t * t * (3 - 2 *
 // Minimum-jerk curve: zero velocity and acceleration at both ends.
 export const spatialEase = (value) => { const t = clamp(value); return t * t * t * (t * (6 * t - 15) + 10); };
 
+/** Scale effect CHANGES, not the base splat size, and preserve the 3D endpoint. */
+export function ambientEffectStrength(frame, flatStrength = MEMORY_SETTINGS.flatEffectStrength) {
+  return frame.effects * (flatStrength + (1-flatStrength)*frame.growth);
+}
+
 /** A deterministic timeline shared by AR and the desktop scrubber. */
 export function memoryFrame(seconds, settings = MEMORY_SETTINGS) {
   if (seconds === null) return { phase: "dormant", seconds: 0, color: -0.15, depth: 0, growth: 0, effects: 0 };

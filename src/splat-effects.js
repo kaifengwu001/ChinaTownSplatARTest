@@ -23,7 +23,8 @@ export function readEnabledEffects(value) {
 /**
  * Puts the effect program shared with the Mattercraft component on a Spark
  * SplatMesh. Returns `update(camera, seconds, strength = 1)` before each render.
- * Strength lets memory activation introduce the ambient look after expansion.
+ * Strength lets memory activation soften the flat stage and smoothly reach the
+ * original 3D look. It scales changes in size/glow/opacity, not the base splat.
  */
 export function attachEffects(mesh, enabled, settings = DEFAULT_EFFECT_SETTINGS) {
   if (!EFFECT_NAMES.some((name) => enabled[name])) return () => {};

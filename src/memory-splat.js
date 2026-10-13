@@ -37,8 +37,8 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
           vec2 flow = vec2(memoryFbm(field*9.0+${i.seconds}*0.8)-0.5,
             memoryFbm(field*8.0+7.3-${i.seconds}*0.6)-0.5);
           surfaceXY += flow*front*0.009;
-          ${o.covsplat}.rgba.rgb = mix(${o.covsplat}.rgba.rgb,
-            memoryChromatic(field, ${i.seconds}), front*0.35);
+          // Keep the reconstruction's own RGB through the ripple. Its ambient
+          // brightness modulation is applied by the shared effect modifier.
         }
 
         mat3 A = mat3(${i.anchorFromMesh});

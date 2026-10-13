@@ -1,20 +1,24 @@
 import * as THREE from "three";
 import { MEMORY_SETTINGS, memoryDimensions } from "./memory-settings.js";
-import { memoryDuration, memoryFrame } from "./memory-timeline.js";
+import { memoryDuration, memoryFrame, ambientEffectStrength } from "./memory-timeline.js";
 import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 import { attachMemoryModifier } from "./memory-splat.js";
 import { createMemoryParticles } from "./memory-particles.js";
 import { updateMatte } from "./window-rig.js";
 
 export async function createMemoryWindow({ anchor, splat, matte, config, button, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
-  const texture = await new THREE.TextureLoader().loadAsync(settings.photoUrl);
+  const loader = new THREE.TextureLoader();
+  const [texture, colorTexture] = await Promise.all([
+    loader.loadAsync(settings.photoUrl), loader.loadAsync(settings.colorPhotoUrl),
+  ]);
   texture.colorSpace = THREE.SRGBColorSpace;
+  colorTexture.colorSpace = THREE.SRGBColorSpace;
   settings = { ...settings };
   const dimensions = memoryDimensions(config, texture.image.width/texture.image.height, settings);
   const { photoWidth, photoHeight, portalWidth, portalHeight } = dimensions;
   updateMatte(matte, { ...config, windowWidth: photoWidth, windowHeight: photoHeight });
   const material = new THREE.ShaderMaterial({
-    uniforms: { photograph: { value: texture }, photoSize: { value: new THREE.Vector2(photoWidth,photoHeight) }, progress: { value: -0.15 }, seconds: { value: 0 } },
+    uniforms: { photograph: { value: texture }, colorImage: { value: colorTexture }, photoSize: { value: new THREE.Vector2(photoWidth,photoHeight) }, progress: { value: -0.15 }, seconds: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec2 photoUv;
       void main() {
@@ -24,6 +28,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     `,
     fragmentShader: /* glsl */ `
       uniform sampler2D photograph;
+      uniform sampler2D colorImage;
       uniform float progress;
       uniform float seconds;
       uniform vec2 photoSize;
@@ -35,14 +40,15 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
         vec2 field = memoryCoordinates(photoUv,photoSize);
         vec2 flow = vec2(memoryFbm(field*9.0+seconds*0.8)-0.5,memoryFbm(field*8.0+7.3-seconds*0.6)-0.5);
         vec2 uv = clamp(photoUv+flow*front*0.014,0.0,1.0);
-        vec2 split = normalize(field+vec2(0.00001))*front*0.006;
-        vec3 rgb = vec3(texture2D(photograph,clamp(uv+split,0.0,1.0)).r,
-          texture2D(photograph,uv).g,texture2D(photograph,clamp(uv-split,0.0,1.0)).b);
-        float gray = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-        vec3 chromatic = memoryChromatic(field,seconds);
+        vec2 split = normalize(field+vec2(0.00001))*front*0.003;
+        vec3 original = texture2D(photograph,uv).rgb;
+        float gray = dot(original, vec3(0.2126, 0.7152, 0.0722));
+        // Chromatic refraction samples nearby channels of the restored image,
+        // retaining its sky, brick, awning, and car colors without a new palette.
+        vec3 rgb = vec3(texture2D(colorImage,clamp(uv+split,0.0,1.0)).r,
+          texture2D(colorImage,uv).g,texture2D(colorImage,clamp(uv-split,0.0,1.0)).b);
         float grain = memoryNoise(photoUv*vec2(350.0,230.0)+seconds*0.25);
-        vec3 activated = mix(vec3(gray),rgb,front*0.7);
-        activated = mix(activated,chromatic*(0.35+grain*0.9),front*0.55);
+        vec3 activated = mix(vec3(gray),rgb*(0.9+grain*0.25),front*0.85);
         gl_FragColor = vec4(activated, 1.0-memoryReveal(radius,progress));
         #include <colorspace_fragment>
       }
@@ -58,7 +64,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   anchor.add(photo);
 
   const updateSplats = attachMemoryModifier(splat.mesh, anchor, config, dimensions, settings);
-  const particles = createMemoryParticles(photoWidth, photoHeight, config.windowDistance);
+  const particles = createMemoryParticles(photoWidth, photoHeight, config.windowDistance, colorTexture);
   anchor.add(particles.points);
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -78,6 +84,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
 
   function apply(seconds, camera, dpr = 1) {
     frame = memoryFrame(seconds, settings);
+    frame = { ...frame, effects: ambientEffectStrength(frame,settings.flatEffectStrength) };
     material.uniforms.progress.value = frame.color;
     material.uniforms.seconds.value = frame.seconds;
     photo.visible = frame.color < 1;
@@ -154,6 +161,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       if (!Number.isFinite(value) || value<1 || value>4) throw new Error("Parallax strength must be between 1 and 4");
       settings.parallaxGain=value;
     },
+    setFlatEffectStrength(value) {
+      if (!Number.isFinite(value) || value<0 || value>1) throw new Error("Flat effect strength must be between 0 and 1");
+      settings.flatEffectStrength=value;
+    },
     activate(now = performance.now() / 1000) {
       if (!anchor.visible || phase !== "dormant") return false;
       frozenSeconds = undefined;
@@ -192,6 +203,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       photo.geometry.dispose();
       material.dispose();
       texture.dispose();
+      colorTexture.dispose();
       particles.dispose();
     },
   };

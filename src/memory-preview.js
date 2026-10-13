@@ -15,6 +15,9 @@ async function main() {
   const params = new URLSearchParams(window.location.search);
   const asset = params.get("splats") ?? "50";
   if (!(asset in ASSETS)) throw new Error(`Unknown ?splats=${asset}`);
+  // Hold the ambient sweep at the same phase for visual strength comparisons.
+  const frozenFxTime = params.has("fxTime") ? Number(params.get("fxTime")) : null;
+  if (frozenFxTime !== null && (!Number.isFinite(frozenFxTime) || frozenFxTime<0)) throw new Error("?fxTime must be a non-negative number of seconds");
   const canvas = document.getElementById("view");
   const timeline = document.getElementById("timeline");
   const time = document.getElementById("time");
@@ -23,8 +26,10 @@ async function main() {
   const settings = readMemorySettings(window.location.search);
   const depthStretch = document.getElementById("depth-stretch");
   const parallaxGain = document.getElementById("parallax-gain");
+  const flatEffects = document.getElementById("flat-effects");
   depthStretch.value = settings.depthStretch;
   parallaxGain.value = settings.parallaxGain;
+  flatEffects.value = settings.flatEffectStrength;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   const scene = new THREE.Scene();
@@ -49,9 +54,10 @@ async function main() {
   floor.material.depthWrite = false;
   scene.add(floor);
   timeline.max = memory.duration;
-  for (const control of [timeline, viewpoint, replay, depthStretch, parallaxGain]) control.disabled = false;
+  for (const control of [timeline, viewpoint, replay, depthStretch, parallaxGain, flatEffects]) control.disabled = false;
   depthStretch.addEventListener("input", () => memory.setDepthStretch(Number(depthStretch.value)));
   parallaxGain.addEventListener("input", () => memory.setParallaxGain(Number(parallaxGain.value)));
+  flatEffects.addEventListener("input", () => memory.setFlatEffectStrength(Number(flatEffects.value)));
   replay.addEventListener("click", () => {
     memory.reset();
     viewpoint.value = "0";
@@ -87,11 +93,12 @@ async function main() {
     camera.lookAt(0, memory.portalCenterY-0.15, -DEFAULTS.windowDistance);
     const now = performance.now() / 1000;
     const frame = memory.update(camera, canvas, now);
-    if (frame.phase !== "dormant") updateEffects(memory.effectsCamera(camera), now, frame.effects);
+    if (frame.phase !== "dormant") updateEffects(memory.effectsCamera(camera), frozenFxTime ?? now, frame.effects);
     timeline.value = Math.min(frame.seconds, memory.duration);
     time.textContent = `${Math.min(frame.seconds, memory.duration).toFixed(1)}s`;
     document.getElementById("depth-value").textContent = `${Number(depthStretch.value).toFixed(1)}×`;
     document.getElementById("parallax-value").textContent = `${Number(parallaxGain.value).toFixed(1)}×`;
+    document.getElementById("flat-effects-value").textContent = `${Math.round(Number(flatEffects.value)*100)}%`;
     renderer.render(scene, camera);
   });
 }

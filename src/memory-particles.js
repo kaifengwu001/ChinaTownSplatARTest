@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 
 /** A light, procedural spray riding the wide activation front. */
-export function createMemoryParticles(photoWidth, photoHeight, distance) {
+export function createMemoryParticles(photoWidth, photoHeight, distance, colorTexture) {
   const columns = 150, rows = 100, count = columns*rows;
   const positions = new Float32Array(count*3);
   const seeds = new Float32Array(count*2);
@@ -18,9 +18,10 @@ export function createMemoryParticles(photoWidth, photoHeight, distance) {
   geometry.setAttribute("position",new THREE.BufferAttribute(positions,3));
   geometry.setAttribute("seed",new THREE.BufferAttribute(seeds,2));
   const material = new THREE.ShaderMaterial({
-    uniforms: { progress:{value:-0.15}, seconds:{value:0}, pixelRatio:{value:1}, centerY:{value:0} },
+    uniforms: { progress:{value:-0.15}, seconds:{value:0}, pixelRatio:{value:1}, centerY:{value:0}, colorImage:{value:colorTexture} },
     vertexShader: /* glsl */ `
       uniform float progress, seconds, pixelRatio, centerY;
+      uniform sampler2D colorImage;
       attribute vec2 seed;
       varying vec3 particleColor;
       varying float particleAlpha;
@@ -44,7 +45,9 @@ export function createMemoryParticles(photoWidth, photoHeight, distance) {
         gl_Position = projectionMatrix*view;
         gl_PointSize = pixelRatio*mix(0.8,4.7,pow(seed.x,5.0))*front;
         particleAlpha = front*mix(0.18,0.88,seed.y);
-        particleColor = memoryChromatic(field+seed*0.3,seconds);
+        // Each particle carries the color of the pixel it came from. Random
+        // seeds vary motion/size/alpha only; they never select a hue.
+        particleColor = texture2D(colorImage,uv).rgb;
       }
     `,
     fragmentShader: /* glsl */ `
