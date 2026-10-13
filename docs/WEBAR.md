@@ -6,7 +6,7 @@ The GitHub repository contains three implementations of a photograph reconstruct
 
 Run `npm install` if needed, then `npm run dev`. Vite serves HTTPS on port 5174 for phone camera and motion access. The engine copy step runs automatically and preserves the bundled 8th Wall engine and license.
 
-- `/ar.html`: phone experience. Start AR, allow camera/motion, move slowly until tracking is normal, then point at and tap the floor to place the photograph. Only horizontal tracked/estimated surface hits below the phone are accepted; feature points and tilted surfaces are rejected. Tap the photograph or **tap to activate memory** below it. Reset clears the placement and restores the original for the next placement.
+- `/ar.html`: phone experience. Start AR, allow camera/motion, move slowly forward and back until scale calibration completes, then tap anywhere on the camera view to place the photograph in front of you. Placement uses the phone's horizontal heading and XR8's estimated world ground (`y=0` in absolute scale); it never waits for a surface hit. The final portal's bottom is on that estimated ground, which may differ from the physical floor if tracking is inaccurate. Tap the photograph or **tap to activate memory** below it. Reset clears the placement and restores the original for the next placement.
 - `/memory.html`: camera-free preview of the **same** activation controller and splat modifier. Tap to play. Tuning controls are hidden by default; add `?controls=1` for the timeline, scene controls, and particle-flow sliders. Replay restores the dormant photograph.
 - `/index.html`: existing camera/framing tuning preview.
 

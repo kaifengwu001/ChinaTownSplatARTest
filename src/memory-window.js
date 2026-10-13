@@ -82,7 +82,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   let startedAt = null;
   let frozenSeconds; // Used by the desktop preview, never by AR.
   let phase;
-  let floorY = -1.5; // Preview default; AR replaces this with a tracked hit before placement.
+  let floorY = -1.5; // Preview default; AR uses XR8's estimated world ground before placement.
   let frame = memoryFrame(null, settings);
 
   function apply(seconds, camera, dpr = 1) {

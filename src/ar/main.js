@@ -3,7 +3,7 @@ import { loadSplatScene, placeSplatScene } from "../splat-scene.js";
 import { attachEffects, readEnabledEffects } from "../splat-effects.js";
 import { createMatte, updateMatte } from "../window-rig.js";
 import { createThreeBridge } from "./xr-bridge.js";
-import { createAnchor, anchorPoseFromCamera, floorFromHits } from "./placement.js";
+import { createAnchor, anchorPoseFromCamera } from "./placement.js";
 import { createHud, trackingPrompt } from "./hud.js";
 import { createMemoryWindow } from "../memory-window.js";
 import { readMemorySettings } from "../memory-settings.js";
@@ -85,20 +85,14 @@ async function main() {
   let camera = null;
   let tracking = { status: "", reason: "" };
 
-  const place = (event) => {
+  const place = () => {
     if (!camera || tracking.status !== "NORMAL") return;
-    const rect = canvas.getBoundingClientRect();
-    const hits = window.XR8.XrController.hitTest((event.clientX-rect.left)/rect.width,
-      (event.clientY-rect.top)/rect.height, ["DETECTED_SURFACE","ESTIMATED_SURFACE"]);
-    const floor = floorFromHits(hits,camera.position.y);
-    if (!floor) {
-      hud.prompt("Point at the floor, move slowly, then tap the floor to place the memory");
-      return;
-    }
     const pose = anchorPoseFromCamera(camera);
     anchor.position.copy(pose.position);
     anchor.quaternion.copy(pose.quaternion);
-    memory.setFloor(floor.position.y-pose.position.y);
+    // With absolute scale, XR8's estimated ground is world y=0. Convert it
+    // into this camera-height anchor's coordinates; no surface hit is needed.
+    memory.setFloor(-pose.position.y);
     memory.reset();
     anchor.visible = true;
     resetButton.hidden = false;
@@ -154,7 +148,7 @@ async function main() {
   resetButton.addEventListener("click", reset);
   activateButton.addEventListener("click", () => memory.activate());
   canvas.addEventListener("click", (event) => {
-    if (!anchor.visible) place(event);
+    if (!anchor.visible) place();
     else if (camera && memory.hit(event, camera, canvas)) memory.activate();
   });
 }
@@ -162,8 +156,8 @@ async function main() {
 async function startXR(canvas, bridge, hud) {
   const XR8 = await waitForXR8();
 
-  // Metric scale is essential: the window is meant to be 1.7m, not "1.7 units
-  // of whatever the first frame's baseline happened to be".
+  // Metric scale also estimates camera height above the world ground (y=0).
+  // Placement waits for NORMAL tracking, when this scale has been calibrated.
   XR8.XrController.configure({ scale: "absolute" });
 
   XR8.addCameraPipelineModules([

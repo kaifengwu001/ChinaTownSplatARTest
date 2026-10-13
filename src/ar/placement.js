@@ -37,15 +37,3 @@ export function anchorPoseFromCamera(camera) {
     quaternion: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw),
   };
 }
-
-/** Reject feature points and tilted surfaces; placement needs a real floor. */
-export function floorFromHits(hits, cameraY) {
-  const floors = hits.filter((hit) => {
-    if (!["DETECTED_SURFACE", "ESTIMATED_SURFACE"].includes(hit.type)) return false;
-    const { position: p, rotation: r } = hit;
-    if (!p || !r || ![p.x,p.y,p.z,r.x,r.y,r.z,r.w].every(Number.isFinite)) return false;
-    const up = new THREE.Vector3(0,1,0).applyQuaternion(new THREE.Quaternion(r.x,r.y,r.z,r.w));
-    return Math.abs(up.y)>0.9 && p.y<cameraY-0.15;
-  });
-  return floors.sort((a,b) => a.position.y-b.position.y)[0] ?? null;
-}

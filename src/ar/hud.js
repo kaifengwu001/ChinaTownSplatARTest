@@ -67,6 +67,6 @@ const REASON_HINTS = Object.freeze({
 /** Coaching text for the current tracking state, or "" when none is needed. */
 export function trackingPrompt({ status, reason }, placed) {
   if (placed) return "";
-  if (status === "NORMAL") return "Point at the floor, then tap to place the memory";
+  if (status === "NORMAL") return "Tap anywhere to place the memory";
   return REASON_HINTS[reason] ?? "Move the phone slowly to start tracking";
 }
