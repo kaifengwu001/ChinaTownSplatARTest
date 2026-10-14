@@ -21,12 +21,13 @@ export function createMemoryParticles(photoWidth, photoHeight, distance, colorTe
   geometry.setAttribute("seed",new THREE.BufferAttribute(seeds,2));
   geometry.setDrawRange(0,settings.particleCount);
   const material = new THREE.ShaderMaterial({
-    uniforms: { progress:{value:-0.15}, seconds:{value:0}, pixelRatio:{value:1}, centerY:{value:0}, colorImage:{value:colorTexture},
+    uniforms: { progress:{value:-0.15}, seconds:{value:0}, pixelRatio:{value:1}, centerY:{value:0}, photoSize:{value:new THREE.Vector2(photoWidth,photoHeight)}, distance:{value:distance}, colorImage:{value:colorTexture},
       sizeMin:{value:settings.particleSizeMin}, sizeMax:{value:settings.particleSizeMax},
       rippleDiameter:{value:settings.rippleDiameter}, transitionWidth:{value:settings.transitionWidth},
       flowStrength:{value:settings.flowStrength}, flowSpeed:{value:settings.flowSpeed}, rippleTurbulence:{value:settings.rippleTurbulence} },
     vertexShader: /* glsl */ `
-      uniform float progress, seconds, pixelRatio, centerY;
+      uniform float progress, seconds, pixelRatio, centerY, distance;
+      uniform vec2 photoSize;
       uniform float sizeMin, sizeMax, rippleDiameter, transitionWidth, flowStrength, flowSpeed, rippleTurbulence;
       uniform sampler2D colorImage;
       attribute vec2 seed;
@@ -36,8 +37,8 @@ export function createMemoryParticles(photoWidth, photoHeight, distance, colorTe
       void main() {
         vec2 uv = position.xy;
         float flowTime = seconds*flowSpeed;
-        vec2 field = memoryCoordinates(uv,vec2(${photoWidth},${photoHeight}));
-        float radius = memoryRadius(uv,vec2(${photoWidth},${photoHeight}),flowTime,rippleTurbulence);
+        vec2 field = memoryCoordinates(uv,photoSize);
+        float radius = memoryRadius(uv,photoSize,flowTime,rippleTurbulence);
         float front = memoryFront(radius,progress,rippleDiameter,transitionWidth);
         vec2 direction = normalize(field+vec2(0.00001));
         vec2 tangent = vec2(-direction.y,direction.x);
@@ -46,8 +47,8 @@ export function createMemoryParticles(photoWidth, photoHeight, distance, colorTe
         float curl = sin(radius*25.0-flowTime*4.0+seed.x*4.0);
         vec2 displacement = front*flowStrength*(turbulence*0.04 + tangent*curl*0.014
           + direction*(seed.y-0.5)*0.023);
-        vec3 p = vec3((uv-0.5)*vec2(${photoWidth},${photoHeight})+displacement,
-          -${distance}+front*flowStrength*(0.008+seed.x*0.022));
+        vec3 p = vec3((uv-0.5)*photoSize+displacement,
+          -distance+front*flowStrength*(0.008+seed.x*0.022));
         p.y += centerY;
         vec4 view = modelViewMatrix*vec4(p,1.0);
         gl_Position = projectionMatrix*view;
@@ -78,7 +79,9 @@ export function createMemoryParticles(photoWidth, photoHeight, distance, colorTe
   points.frustumCulled = false;
   points.renderOrder = 2;
   return { points,
-    update(frame,dpr,centerY) { points.visible=frame.phase==="colorizing"; material.uniforms.progress.value=frame.color;
+    update(frame,dpr,centerY,dimensions) { points.visible=frame.phase==="colorizing"; material.uniforms.progress.value=frame.color;
+      if (dimensions) material.uniforms.photoSize.value.set(dimensions.photoWidth,dimensions.photoHeight);
+      material.uniforms.distance.value=settings.photoDistance;
       geometry.setDrawRange(0,settings.particleCount);
       material.uniforms.sizeMin.value=settings.particleSizeMin;
       material.uniforms.sizeMax.value=settings.particleSizeMax;

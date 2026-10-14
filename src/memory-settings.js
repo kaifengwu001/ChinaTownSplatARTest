@@ -1,3 +1,5 @@
+import { DEFAULTS } from "./config.js";
+
 // The original is bundled by Vite so the same asset works locally and on Vercel.
 // Projection metadata belongs to the COLOR photograph used to produce the SOG,
 // even when the original has slightly different dimensions or a different crop.
@@ -22,15 +24,49 @@ export const MEMORY_SETTINGS = Object.freeze({
   flatHoldDuration: 0.35,
   depthDuration: 3.1,
   photoScale: 0.5,
-  photoDistance: 0.6,
+  photoDistance: 0.4,
+  photoElevation: 0,
   portalWidthScale: 1.5,
   portalHeightScale: 2.5,
   portalBottomHeight: 0.5,
+  portalDistance: DEFAULTS.windowDistance,
+  sceneScale: DEFAULTS.sceneScale,
+  sceneDistance: DEFAULTS.sceneOffsetZ,
+  sceneElevation: DEFAULTS.sceneOffsetY,
+  scenePitch: DEFAULTS.scenePitchDeg,
   depthStretch: 2,
   parallaxGain: 1,
   flatEffectStrength: 1,
   ...Object.fromEntries(PARTICLE_FLOW_PARAMETERS.map(({ key, value }) => [key, value])),
 });
+
+export const MEMORY_TUNING_PARAMETERS = Object.freeze([
+  { key: "photoScale", label: "Image width", min: 0.125, max: 3, step: 0.025, unit: "photoWidth", group: "Layout" },
+  { key: "photoDistance", label: "Image distance", min: 0.15, max: 2, step: 0.01, unit: "m", group: "Layout" },
+  { key: "photoElevation", label: "Image height offset", min: -1, max: 1, step: 0.01, unit: "m", group: "Layout" },
+  { key: "portalWidthScale", label: "Portal width", min: 0.5, max: 4, step: 0.05, unit: "portalWidth", group: "Layout" },
+  { key: "portalHeightScale", label: "Portal height", min: 0.5, max: 5, step: 0.05, unit: "portalHeight", group: "Layout" },
+  { key: "portalDistance", label: "Portal distance", min: 0.3, max: 3, step: 0.01, unit: "m", group: "Layout" },
+  { key: "portalBottomHeight", label: "Portal bottom height", min: 0, max: 2, step: 0.01, unit: "m", group: "Layout" },
+  { key: "sceneScale", label: "Scene size", min: 0.2, max: 3, step: 0.01, unit: "gain", group: "Scene" },
+  { key: "sceneDistance", label: "Scene distance", min: 0, max: 5, step: 0.01, unit: "m", group: "Scene" },
+  { key: "sceneElevation", label: "Scene height", min: -3, max: 2, step: 0.01, unit: "m", group: "Scene" },
+  { key: "scenePitch", label: "Scene tilt", min: -30, max: 30, step: 0.1, unit: "deg", group: "Scene" },
+  { key: "depthStretch", label: "Depth stretch", min: 0.5, max: 4, step: 0.1, unit: "gain", group: "Scene" },
+  { key: "parallaxGain", label: "Parallax strength", min: 1, max: 4, step: 0.1, unit: "gain", group: "Scene" },
+  { key: "flatEffectStrength", label: "Flat dream effects", min: 0, max: 1, step: 0.05, unit: "percent", group: "Scene" },
+  ...PARTICLE_FLOW_PARAMETERS.map(parameter => ({ ...parameter, group: "Particles" })),
+  { key: "colorDuration", label: "Color duration", min: 0.5, max: 6, step: 0.05, unit: "s", group: "Timing" },
+  { key: "flatHoldDuration", label: "Flat hold", min: 0, max: 2, step: 0.05, unit: "s", group: "Timing" },
+  { key: "depthDuration", label: "Depth duration", min: 0.5, max: 8, step: 0.05, unit: "s", group: "Timing" },
+].map(parameter => Object.freeze({ ...parameter, value: MEMORY_SETTINGS[parameter.key] })));
+
+export function validateMemorySettings(settings) {
+  for (const { key, min, max } of MEMORY_TUNING_PARAMETERS) {
+    if (!Number.isFinite(settings[key]) || settings[key] < min || settings[key] > max) throw new Error(`${key} must be between ${min} and ${max}`);
+  }
+  validateParticleFlow(settings);
+}
 
 export function validateParticleFlow(settings) {
   for (const { key, min, max } of PARTICLE_FLOW_PARAMETERS) {
@@ -45,16 +81,10 @@ export function validateParticleFlow(settings) {
 export function readMemorySettings(search) {
   const params = new URLSearchParams(search);
   const settings = { ...MEMORY_SETTINGS };
-  for (const [key, min, max] of [["depthStretch", 0.5, 4], ["parallaxGain", 1, 4], ["flatEffectStrength", 0, 1]]) {
-    if (!params.has(key)) continue;
-    const value = Number(params.get(key));
-    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`?${key} must be between ${min} and ${max}`);
-    settings[key] = value;
-  }
-  for (const { key } of PARTICLE_FLOW_PARAMETERS) {
+  for (const { key } of MEMORY_TUNING_PARAMETERS) {
     if (params.has(key)) settings[key] = Number(params.get(key));
   }
-  validateParticleFlow(settings);
+  validateMemorySettings(settings);
   return settings;
 }
 

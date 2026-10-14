@@ -1,11 +1,12 @@
 import * as THREE from "three";
-import { MEMORY_SETTINGS, PARTICLE_FLOW_PARAMETERS, memoryDimensions, validateParticleFlow } from "./memory-settings.js";
+import { MEMORY_SETTINGS, MEMORY_TUNING_PARAMETERS, PARTICLE_FLOW_PARAMETERS, memoryDimensions, validateMemorySettings, validateParticleFlow } from "./memory-settings.js";
 import { memoryDuration, memoryFrame, ambientEffectStrength } from "./memory-timeline.js";
 import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 import { attachMemoryModifier } from "./memory-splat.js";
 import { createMemoryParticles } from "./memory-particles.js";
 import { memoryPlacement } from "./memory-placement.js";
 import { updateMatte } from "./window-rig.js";
+import { warmMemory, primeMemory } from "./memory-warmup.js";
 
 export async function createMemoryWindow({ anchor, splat, matte, config, button, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
   const loader = new THREE.TextureLoader();
@@ -17,6 +18,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   settings = { ...settings };
   const dimensions = memoryDimensions(config, texture.image.width/texture.image.height, settings);
   const { photoWidth, photoHeight, portalWidth, portalHeight } = dimensions;
+  const baseDimensions = { ...dimensions };
   updateMatte(matte, { ...config, windowWidth: photoWidth, windowHeight: photoHeight });
   const material = new THREE.ShaderMaterial({
     uniforms: { photograph: { value: texture }, colorImage: { value: colorTexture }, photoSize: { value: new THREE.Vector2(photoWidth,photoHeight) }, progress: { value: -0.15 }, seconds: { value: 0 },
@@ -85,6 +87,17 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   let phase;
   let floorY = -1.5; // Preview default; AR uses XR8's estimated world ground before placement.
   let frame = memoryFrame(null, settings);
+  let ready = false;
+  let preparing = null;
+
+  function refreshLayout() {
+    Object.assign(dimensions, memoryDimensions(config, texture.image.width/texture.image.height, settings));
+    photo.scale.set(dimensions.photoWidth/baseDimensions.photoWidth, dimensions.photoHeight/baseDimensions.photoHeight, 1);
+    material.uniforms.photoSize.value.set(dimensions.photoWidth,dimensions.photoHeight);
+    splat.pivot.scale.setScalar(settings.sceneScale);
+    splat.pivot.rotation.x = THREE.MathUtils.degToRad(settings.scenePitch);
+    splat.root.position.set(0,settings.sceneElevation,-settings.sceneDistance);
+  }
 
   function apply(seconds, camera, dpr = 1) {
     frame = memoryFrame(seconds, settings);
@@ -93,19 +106,22 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     material.uniforms.seconds.value = frame.seconds;
     for (const key of ["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"]) material.uniforms[key].value=settings[key];
     photo.visible = frame.color < 1;
-    splat.root.visible = frame.phase !== "dormant";
+    // Keep the generated splat layout resident while dormant; the modifier's
+    // zero reveal hides it without discarding its warmed rendering resources.
+    splat.root.visible = true;
+    const { photoWidth, photoHeight, portalWidth, portalHeight } = dimensions;
     const height = THREE.MathUtils.lerp(photoHeight, portalHeight, frame.growth);
     const width = THREE.MathUtils.lerp(photoWidth, portalWidth, frame.growth);
     const placement = memoryPlacement(frame.growth, config, dimensions, settings, floorY);
     // Scaling the matte also scales its rectangular hole; this avoids building
     // and discarding geometry on every frame of the height animation.
-    matte.scale.y = height / photoHeight;
-    matte.scale.x = width / photoWidth;
+    matte.scale.y = height / baseDimensions.photoHeight;
+    matte.scale.x = width / baseDimensions.photoWidth;
     matte.position.set(0, placement.centerY, -placement.distance);
     photo.position.copy(matte.position);
     updateSplats(frame, camera, placement.targetCenterY);
     // The ripple finishes on the original plane before spatial expansion.
-    particles.update(frame,dpr,0);
+    particles.update(frame,dpr,settings.photoElevation,dimensions);
     if (phase !== frame.phase) {
       phase = frame.phase;
       onPhase(phase);
@@ -114,13 +130,13 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
 
   function positionButton(camera, canvas) {
     if (!button) return;
-    button.hidden = !anchor.visible || phase !== "dormant";
+    button.hidden = !ready || !anchor.visible || phase !== "dormant";
     if (button.hidden) return;
     // Project a point BELOW the anchored photograph, rather than putting the
     // instruction over the image or at an unrelated screen-fixed location.
     camera.updateWorldMatrix(true, false);
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    labelPoint.set(0, -photoHeight/2-0.045, -settings.photoDistance);
+    labelPoint.set(0, settings.photoElevation-dimensions.photoHeight/2-0.045, -settings.photoDistance);
     anchor.localToWorld(labelPoint);
     cameraPoint.copy(labelPoint).applyMatrix4(camera.matrixWorldInverse);
     labelPoint.project(camera);
@@ -136,7 +152,9 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   const api = {
     get phase() { return phase; },
     get frame() { return frame; },
-    duration: memoryDuration(settings),
+    get duration() { return memoryDuration(settings); },
+    get ready() { return ready; },
+    getSettings() { return { ...settings }; },
     dimensions,
     get portalCenterY() { return memoryPlacement(frame.growth, config, dimensions, settings, floorY).centerY; },
     get portalDistance() { return memoryPlacement(frame.growth, config, dimensions, settings, floorY).distance; },
@@ -147,8 +165,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       effectsForward.set(0,0,-1).transformDirection(camera.matrixWorld);
       effectsPose.copy(anchor.matrixWorld).invert();
       effectsForward.transformDirection(effectsPose);
-      const targetCenterY = floorY + settings.portalBottomHeight + portalHeight/2;
-      effectsForward.y += targetCenterY/config.windowDistance*effectsForward.z;
+      const targetCenterY = floorY + settings.portalBottomHeight + dimensions.portalHeight/2;
+      effectsForward.y += targetCenterY/settings.portalDistance*effectsForward.z;
       effectsForward.normalize().transformDirection(anchor.matrixWorld);
       captureForward.set(0,0,1).transformDirection(splat.mesh.matrixWorld);
       effectsForward.lerpVectors(captureForward,effectsForward,frame.growth).normalize();
@@ -161,6 +179,30 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     setFloor(localY) {
       if (!Number.isFinite(localY)) throw new Error("Floor height must be finite");
       floorY = localY;
+    },
+    setTuning(values) {
+      const keys = MEMORY_TUNING_PARAMETERS.map(({ key }) => key);
+      for (const key of Object.keys(values)) if (!keys.includes(key)) throw new Error(`Unknown tuning parameter: ${key}`);
+      const next = { ...settings, ...values };
+      validateMemorySettings(next);
+      Object.assign(settings,values);
+      refreshLayout();
+    },
+    prepare(context) {
+      if (ready) return Promise.resolve();
+      if (preparing) return preparing;
+      preparing = warmMemory({ ...context, anchor, textures:[texture,colorTexture],
+        sample: (seconds,camera) => apply(seconds,camera),
+        samples: [settings.colorDuration*0.35, settings.colorDuration+settings.flatHoldDuration+settings.depthDuration*0.5, memoryDuration(settings), settings.colorDuration*0.35],
+      }).then(() => { ready = true; }).finally(() => { preparing = null; apply(null); });
+      return preparing;
+    },
+    prime(context) {
+      if (preparing) return preparing;
+      ready = false;
+      preparing = primeMemory({ ...context, sample: (seconds,camera) => apply(seconds,camera) })
+        .then(() => { ready = true; }).finally(() => { preparing = null; });
+      return preparing;
     },
     setDepthStretch(value) {
       if (!Number.isFinite(value) || value<0.5 || value>4) throw new Error("Depth stretch must be between 0.5 and 4");
@@ -182,7 +224,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       Object.assign(settings,values);
     },
     activate(now = performance.now() / 1000) {
-      if (!anchor.visible || phase !== "dormant") return false;
+      if (!ready || !anchor.visible || phase !== "dormant") return false;
       frozenSeconds = undefined;
       startedAt = now;
       apply(0);
@@ -196,8 +238,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       if (button) button.hidden = true;
     },
     seek(seconds) {
+      if (!ready) return false;
       frozenSeconds = seconds;
       apply(seconds);
+      return true;
     },
     update(camera, canvas, now = performance.now() / 1000) {
       const seconds = frozenSeconds !== undefined ? frozenSeconds : startedAt === null ? null : now - startedAt;
@@ -224,6 +268,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
       particles.dispose();
     },
   };
+  refreshLayout();
   apply(null);
   return api;
 }

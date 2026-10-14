@@ -31,6 +31,25 @@ The **Particle flow** panel at `/memory.html?controls=1` provides eight live sli
 
 The size boundaries carry each other along when crossed so minimum never exceeds maximum. All eight URL parameters also work on `/ar.html`. The spray reuses a fixed particle buffer and changes its draw count; every density prefix covers the whole image. Diameter, width, strength, speed, and irregularity update the shared photograph/splat/particle wave together. Even a small diameter or broad transition finishes revealing the full photograph smoothly before expansion.
 
+## Live phone tuning and preparation
+
+The phone AR view has a collapsed **Tune** button. The menu docks below a resized camera canvas, rather than covering the memory; closing it restores the full camera area. Canvas resizing updates the XR camera projection and render buffer together. Tuning gestures are handled by the panel and never trigger placement or activation.
+
+In portrait the sliders use two columns with a scrollable area. In landscape, the dock rearranges into four columns and keeps a usable slider area. Resize writes run on the next animation frame to avoid resize-observer errors when opening, closing, or rotating the view.
+
+- **Layout:** image width, distance, height offset from the placement-time phone; portal width, height, distance, and bottom height above estimated ground.
+- **Scene:** reconstruction size, distance, elevation, tilt, depth stretch, parallax strength, and flat-stage dream effects.
+- **Particles:** the eight particle/ripple parameters listed above.
+- **Timing:** color, flat hold, and depth durations.
+
+**Original** restores the dormant photograph at the existing placement; **Replay** plays the full activation; **Loop ripple** repeats the color stage. The activation scrubber holds any frame while the ambient effects continue animating. **Defaults** restores the shared preset, and **Copy link** includes all 25 tuning values without a frozen playback/effects clock. All parameters work as URL keys on AR and memory preview. The same phone dock can be reviewed without a camera at `/memory.html?arControls=1`.
+
+Layout and scene tuning update transforms and shader uniforms; they do not rebuild the splat generator, shader, or particle buffers. Photo geometry scales its existing UV-mapped plane, and the shared physical dimensions update the photograph, splats, particle wave, aperture, and tap target together.
+
+First-use work happens before activation: photographs and SOG data load first, then the actual GL renderer warms the color, depth, and final states offscreen. Preparation awaits Spark's generation/sorting, `renderer.compileAsync`, texture uploads, and a WebGL2 GPU fence. The AR camera feed and tracking can run while this happens, with a **Preparing memory effects…** prompt; scene rendering/placement/activation wait until preparation succeeds. In preview it happens before the activation button or scrubber becomes available. A preparation error leaves activation disabled and visible errors intact. Uniform-only tuning does not need another shader warmup. The dormant splat mapping stays resident at zero reveal after placement so replay can reuse the prepared resources.
+
+Placement primes the dormant mapping again before enabling activation. It drains any queued automatic update or in-flight sort first, waits for the placed mapping's sorting to finish, and uploads its ordering texture before the GPU fence. This prevents Spark's early-returning `update()` from making activation ready while a prior sort still runs. `npm test` covers readiness/failure handling, overlapping sorts, placement-time anchoring, tuning endpoints, and uniform-only shader reuse.
+
 ## Memory activation
 
 `input/memory-original.jpg` is the supplied black-and-white photograph, copied without modification. Vite bundles it as a hashed asset. Replace that file to change the original.
@@ -39,10 +58,10 @@ The size boundaries carry each other along when crossed so minimum never exceeds
 
 The stages are controlled by `src/memory-settings.js`:
 
-1. **Dormant:** full photograph at 0.2 m wide, preserving its proportions, **0.6 m horizontally ahead of the phone at placement**. Its center is at that phone's placement-time height. An instruction is projected below the image, and the splat scene is hidden. The anchor remains fixed when the phone moves.
+1. **Dormant:** full photograph at 0.2 m wide, preserving its proportions, **0.4 m horizontally ahead of the phone at placement**. Its center is at that phone's placement-time height. An instruction is projected below the image, and the splat scene is hidden. The anchor remains fixed when the phone moves.
 2. **Color (2.7 s):** a wide, irregular circular wave travels from the center in physical coordinates, independent of photo aspect. The photograph refracts and dissolves through its own restored colors; an 11,516-particle spray curls around the crest. The actual colored splats are revealed on a thin sheet behind the window. Ambient sweep/periphery effects begin with the first colored region at the configurable flat-stage strength.
 3. **Surface hold (0.35 s):** the colored reconstruction stays flat before opening.
-4. **Depth (3.1 s):** a quintic minimum-jerk curve starts slowly, accelerates, and slows to a stop. The aperture grows to **0.6 m wide × 1.0 m tall**, **1.28 m horizontally ahead of the placement-time phone pose**, with its bottom **0.5 m** and top **1.5 m** above estimated ground. Splats move into the scene with configurable depth stretch and exaggerated parallax. Their inverse depth and image rays interpolate with the same eased progress as the aperture. The aperture itself recedes from 0.6 to 1.28 m in inverse depth and moves vertically along that shared viewing-ray interpolation, keeping it in front of the splats throughout expansion.
+4. **Depth (3.1 s):** a quintic minimum-jerk curve starts slowly, accelerates, and slows to a stop. The aperture grows to **0.6 m wide × 1.0 m tall**, **1.28 m horizontally ahead of the placement-time phone pose**, with its bottom **0.5 m** and top **1.5 m** above estimated ground. Splats move into the scene with configurable depth stretch and exaggerated parallax. Their inverse depth and image rays interpolate with the same eased progress as the aperture. The aperture itself recedes from 0.4 to 1.28 m in inverse depth and moves vertically along that shared viewing-ray interpolation, keeping it in front of the splats throughout expansion.
 
 The GPU modifier changes uniforms during activation instead of uploading new splat buffers each frame. It transforms covariance with the spatial mapping's Jacobian, preserving each Gaussian's projected footprint instead of separately mixing thin scales and orientations. This fixes gaps during expansion; a small temporary overlap reserve also protects the decimated samples. Spark's covariance renderer and extended precision retain the resulting shapes and positions. This uses more GPU memory than the checkpoint's packed renderer, so mobile performance needs verification. The photo, splats, and particle spray share the same wave. Aperture growth scales the existing matte instead of rebuilding geometry each frame.
 

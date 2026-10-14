@@ -4,23 +4,21 @@ import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 
 /** Deform centers AND covariance with the same spatial mapping. */
 export function attachMemoryModifier(mesh, anchor, config, dimensions, settings) {
-  const { photoWidth, photoHeight } = dimensions;
-  const focalX = photoWidth * settings.captureFocalRatio;
-  const focalY = focalX * photoHeight / (photoWidth / settings.captureAspect);
-  const d = config.windowDistance;
-  const photoDistance = settings.photoDistance;
+  const photoSize = new THREE.Vector2(dimensions.photoWidth, dimensions.photoHeight);
   const u = {
     color: dyno.dynoFloat(-0.15), motion: dyno.dynoFloat(0), seconds: dyno.dynoFloat(0),
     meshFromAnchor: dyno.dynoMat4(new THREE.Matrix4()),
     anchorFromMesh: dyno.dynoMat4(new THREE.Matrix4()),
     eye: dyno.dynoVec3(new THREE.Vector3()),
-    sheetRadius: dyno.dynoFloat(photoDistance),
+    sheetRadius: dyno.dynoFloat(settings.photoDistance),
+    photoSize: dyno.dynoVec2(photoSize.clone()), photoDistance: dyno.dynoFloat(settings.photoDistance),
+    portalDistance: dyno.dynoFloat(settings.portalDistance), photoElevation: dyno.dynoFloat(settings.photoElevation),
     centerY: dyno.dynoFloat(0), stretch: dyno.dynoFloat(settings.depthStretch),
     parallax: dyno.dynoFloat(settings.parallaxGain),
     ...Object.fromEntries(["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"].map(key => [key,dyno.dynoFloat(settings[key])])),
   };
   const modifier = dyno.dyno({
-    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", centerY: "float", stretch: "float", parallax: "float",
+    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", centerY: "float", stretch: "float", parallax: "float", photoSize: "vec2", photoDistance: "float", portalDistance: "float", photoElevation: "float",
       rippleDiameter: "float", transitionWidth: "float", flowStrength: "float", flowSpeed: "float", rippleTurbulence: "float" },
     outTypes: { covsplat: dyno.CovSplat }, inputs: u,
     globals: () => [dyno.defineCovSplat, MEMORY_WAVE_GLSL],
@@ -29,16 +27,16 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
       if (isCovSplatActive(${i.covsplat}.flags)) {
         vec3 p = ${i.covsplat}.center;
         float z = max(p.z, 0.001);
-        vec2 focal = vec2(${focalX}, ${focalY});
+        vec2 focal = vec2(${i.photoSize}.x*${settings.captureFocalRatio}, ${i.photoSize}.y*${settings.captureFocalRatio*settings.captureAspect});
         vec2 surfaceXY = p.xy*focal/z*vec2(1.0,-1.0);
-        vec2 uv = surfaceXY/vec2(${photoWidth},${photoHeight})+0.5;
+        vec2 uv = surfaceXY/${i.photoSize}+0.5;
         float front = 0.0, reveal = 1.0;
         if (${i.color} < 1.0) {
           float flowTime = ${i.seconds}*${i.flowSpeed};
-          float radius = memoryRadius(uv, vec2(${photoWidth},${photoHeight}), flowTime, ${i.rippleTurbulence});
+          float radius = memoryRadius(uv, ${i.photoSize}, flowTime, ${i.rippleTurbulence});
           front = memoryFront(radius, ${i.color}, ${i.rippleDiameter}, ${i.transitionWidth});
           reveal = memoryReveal(radius, ${i.color}, ${i.rippleDiameter}, ${i.transitionWidth});
-          vec2 field = memoryCoordinates(uv, vec2(${photoWidth},${photoHeight}));
+          vec2 field = memoryCoordinates(uv, ${i.photoSize});
           vec2 flow = vec2(memoryFbm(field*9.0+flowTime*0.8)-0.5,
             memoryFbm(field*8.0+7.3-flowTime*0.6)-0.5);
           surfaceXY += flow*front*${i.flowStrength}*0.009;
@@ -52,20 +50,21 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         vec3 az = vec3(A[0].z,A[1].z,A[2].z);
         vec3 base = (${i.anchorFromMesh}*vec4(p,1.0)).xyz;
         float baseDepth = max(-base.z,0.01);
-        float targetDepth = max(${d}+${i.stretch}*(baseDepth-${d}), ${d}+0.01);
-        vec3 targetDepthDerivative = -${i.stretch}*az;
+        float stretchedDepth = ${i.portalDistance}+${i.stretch}*(baseDepth-${i.portalDistance});
+        float targetDepth = max(stretchedDepth, ${i.portalDistance}+0.01);
+        vec3 targetDepthDerivative = stretchedDepth > ${i.portalDistance}+0.01 ? -${i.stretch}*az : vec3(0.0);
         // Depth stretching preserves the center view. Extra parallax is a
         // camera-dependent shear about the WINDOW plane, which stays anchored.
-        vec2 cameraShear = (${i.parallax}-1.0)*${i.eye}.xy/max(${d}+${i.eye}.z,0.15);
-        vec2 targetRay = base.xy/baseDepth + vec2(0.0,${i.centerY}/${d})
-          + cameraShear*(1.0-${d}/targetDepth);
+        vec2 cameraShear = (${i.parallax}-1.0)*${i.eye}.xy/max(${i.portalDistance}+${i.eye}.z,0.15);
+        vec2 targetRay = base.xy/baseDepth + vec2(0.0,${i.centerY}/${i.portalDistance})
+          + cameraShear*(1.0-${i.portalDistance}/targetDepth);
         vec3 rayXDerivative = ax/baseDepth + base.x/(baseDepth*baseDepth)*az
-          + cameraShear.x*${d}/(targetDepth*targetDepth)*targetDepthDerivative;
+          + cameraShear.x*${i.portalDistance}/(targetDepth*targetDepth)*targetDepthDerivative;
         vec3 rayYDerivative = ay/baseDepth + base.y/(baseDepth*baseDepth)*az
-          + cameraShear.y*${d}/(targetDepth*targetDepth)*targetDepthDerivative;
+          + cameraShear.y*${i.portalDistance}/(targetDepth*targetDepth)*targetDepthDerivative;
 
         float t = ${i.motion};
-        float sheetDepth = ${photoDistance}+0.006;
+        float sheetDepth = ${i.photoDistance}+0.006;
         vec3 sheetDepthDerivative = vec3(0.0);
         vec2 sheetRay = vec2(0.0);
         vec3 sheetDX = vec3(0.0), sheetDY = vec3(0.0);
@@ -77,7 +76,7 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
           // on a shallow camera-centered shell ordered by ORIGINAL distance.
           // Its screen position and footprint still match the anchored flat photo.
           // The original plane is at placement-time phone height (local y=0).
-          vec3 sheetPoint = vec3(surfaceXY,-${photoDistance}-0.006);
+          vec3 sheetPoint = vec3(surfaceXY+vec2(0.0,${i.photoElevation}),-${i.photoDistance}-0.006);
           vec3 sheetDelta = sheetPoint-${i.eye};
           float sheetLength = max(length(sheetDelta),0.001);
           vec3 sheetDirection = sheetDelta/sheetLength;
@@ -140,6 +139,7 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
   return (frame, camera, centerY) => {
     anchor.updateWorldMatrix(true,true);
     relative.copy(anchor.matrixWorld).invert().multiply(mesh.matrixWorld);
+    const transformChanged = !u.anchorFromMesh.value.equals(relative);
     u.anchorFromMesh.value.copy(relative);
     u.meshFromAnchor.value.copy(relative).invert();
     if (camera) {
@@ -147,16 +147,21 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
       eye.setFromMatrixPosition(camera.matrixWorld);
       anchor.worldToLocal(eye);
     }
-    const changed = !u.eye.value.equals(eye) || u.centerY.value !== centerY
-      || u.stretch.value !== settings.depthStretch || u.parallax.value !== settings.parallaxGain;
+    photoSize.set(dimensions.photoWidth, dimensions.photoHeight);
+    const changed = transformChanged || !u.eye.value.equals(eye) || u.centerY.value !== centerY
+      || u.stretch.value !== settings.depthStretch || u.parallax.value !== settings.parallaxGain
+      || !u.photoSize.value.equals(photoSize) || u.photoDistance.value !== settings.photoDistance
+      || u.portalDistance.value !== settings.portalDistance || u.photoElevation.value !== settings.photoElevation;
+    u.photoSize.value.copy(photoSize);
+    for (const key of ["photoDistance","portalDistance","photoElevation"]) u[key].value = settings[key];
     u.eye.value.copy(eye);
     // Start the shell behind the furthest photo corner, keeping it behind the
     // portal matte. Radius differences then encode depth, not pixel location.
     if (frame.growth < 1) {
       let sheetRadius = 0;
-      for (const x of [-photoWidth/2,photoWidth/2]) {
-        for (const y of [-photoHeight/2,photoHeight/2]) {
-          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,y-eye.y,-photoDistance-0.006-eye.z));
+      for (const x of [-dimensions.photoWidth/2,dimensions.photoWidth/2]) {
+        for (const y of [-dimensions.photoHeight/2,dimensions.photoHeight/2]) {
+          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,settings.photoElevation+y-eye.y,-settings.photoDistance-0.006-eye.z));
         }
       }
       u.sheetRadius.value = sheetRadius+0.006;
@@ -168,7 +173,7 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     u.color.value = frame.color;
     u.motion.value = frame.growth;
     u.seconds.value = frame.seconds;
-    if (frame.phase !== "dormant" && (frame.phase !== "active" || previousPhase !== "active" || changed)) mesh.updateVersion();
+    if ((frame.phase !== "active" && frame.phase !== "dormant") || previousPhase !== frame.phase || changed) mesh.updateVersion();
     previousPhase = frame.phase;
   };
 }

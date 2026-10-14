@@ -1,7 +1,7 @@
 @import "./ar/ar.css";
 
 body { background: #171b1c; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#view { position: fixed; top: 0; left: 0; width: 100%; height: calc(100% - var(--tuning-height, 0px)); display: block; }
 header { position: fixed; top: max(28px, env(safe-area-inset-top)); left: 28px; pointer-events: none; }
 .eyebrow { color: #a9b5b5; font-size: 10px; letter-spacing: 0.16em; }
 h1 { margin: 10px 0 8px; font: 32px/1.1 Georgia, serif; font-weight: 400; color: #f0e6d4; }

@@ -16,7 +16,8 @@ const FAR = 5000; // Accommodate the configurable depth stretch, including far s
  * what that one does: share 8th Wall's GL context, copy the tracked pose and
  * projection onto a camera each frame, and draw after the camera feed.
  *
- * `onReady` receives `{ renderer, scene, camera }` once the GL context exists.
+ * `onReady` receives `{ renderer, spark, scene, camera }` once the GL context
+ * exists. Scene rendering waits for its returned preparation promise.
  * `onTracking` receives `{ status, reason }` whenever either changes.
  * `onBeforeRender` receives the camera just before each frame is drawn.
  * `onRendered` is called after each frame is drawn.
@@ -30,8 +31,9 @@ export function createThreeBridge({
   onBeforeRender = () => {},
   onRendered = () => {},
   onView = () => {},
+  onError = console.error,
 }) {
-  const state = { renderer: null, scene: null, camera: null, status: "", reason: "", size: "", view: "" };
+  const state = { renderer: null, scene: null, camera: null, ready: false, status: "", reason: "", size: "", view: "" };
 
   const syncProjection = (width, height) => {
     state.size = `${width}x${height}`;
@@ -90,7 +92,8 @@ export function createThreeBridge({
       renderer.autoClear = false;
 
       const scene = new THREE.Scene();
-      scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true, sortRadial: true }));
+      const spark = new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true, sortRadial: true });
+      scene.add(spark);
 
       // Starting pose must match the origin handed to 8th Wall below, so the
       // tracked world and our scene share one frame.
@@ -100,7 +103,8 @@ export function createThreeBridge({
 
       Object.assign(state, { renderer, scene, camera });
       syncProjection(canvasWidth, canvasHeight);
-      onReady({ renderer, scene, camera });
+      Promise.resolve().then(() => onReady({ renderer, spark, scene, camera }))
+        .then(() => { state.ready = true; }).catch(onError);
     },
 
     onCanvasSizeChange: ({ canvasWidth, canvasHeight }) => {
@@ -116,7 +120,7 @@ export function createThreeBridge({
 
     onRender: () => {
       const { renderer, scene, camera } = state;
-      if (!renderer) return;
+      if (!renderer || !state.ready) return;
       // 8th Wall has just drawn the camera feed with its own GL state; three's
       // cached state is stale, and the colour buffer must be kept.
       renderer.resetState();

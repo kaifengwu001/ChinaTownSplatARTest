@@ -8,6 +8,7 @@ import { createAnchor } from "./ar/placement.js";
 import { createMemoryWindow } from "./memory-window.js";
 import { readMemorySettings } from "./memory-settings.js";
 import { createMemoryFlowControls } from "./memory-flow-controls.js";
+import { createArTuning } from "./ar/tuning.js";
 
 const STAGES = { dormant: "A photograph, waiting", colorizing: "Color ripples across the surface", surface: "The reconstructed photograph", expanding: "The street opens into depth", active: "A window into the memory" };
 const ASSETS = { full: "/chop_suey.sog", 50: "/chop_suey_50.sog", 25: "/chop_suey_25.sog" };
@@ -37,7 +38,8 @@ async function main() {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   const scene = new THREE.Scene();
-  scene.add(new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true, sortRadial: true }));
+  const spark = new SparkRenderer({ renderer, covSplats: true, accumExtSplats: true, sortRadial: true });
+  scene.add(spark);
   const camera = new THREE.PerspectiveCamera(29, 1, 0.05, 5000);
   const matte = createMatte({ occluder: true });
   const splat = await loadSplatScene(ASSETS[asset], { covSplats: true });
@@ -52,7 +54,17 @@ async function main() {
   });
   anchor.visible = true;
   memory.setFloor(-1.5);
+  document.getElementById("stage").textContent = "Preparing effects…";
+  document.getElementById("preview-instructions").textContent = "Preparing memory effects…";
+  renderer.setSize(window.innerWidth,window.innerHeight,false);
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  await memory.prepare({ renderer, spark, scene, camera,
+    beforeSample: (cam,seconds) => updateEffects(memory.effectsCamera(cam),seconds,memory.frame.effects),
+  });
+  document.getElementById("preview-instructions").textContent = "Tap the photograph to bring the street back to life.";
   const flowControls = showControls ? createMemoryFlowControls(memory,settings,() => { frozenFxTime = null; }) : null;
+  const arTuning = params.get("arControls") === "1" ? createArTuning(memory,anchor) : null;
   const floor = new THREE.GridHelper(10,40,0x405553,0x283b39);
   floor.position.y = -1.5;
   floor.renderOrder = -2;
@@ -73,11 +85,17 @@ async function main() {
     if (memory.hit(event, camera, canvas)) memory.activate();
   });
   const resize = () => {
-    renderer.setSize(window.innerWidth, window.innerHeight, false);
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const { width, height } = canvas.getBoundingClientRect();
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
   };
   window.addEventListener("resize", resize);
+  let resizeFrame = null;
+  new ResizeObserver(() => {
+    if (resizeFrame !== null) return;
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = null; resize(); });
+  }).observe(canvas);
   resize();
   window.addEventListener("error", (event) => showError(event.message));
   window.addEventListener("unhandledrejection", (event) => showError(event.reason?.message ?? String(event.reason)));
@@ -90,15 +108,18 @@ async function main() {
     camera.position.x = Number(viewpoint.value);
     const now = performance.now() / 1000;
     flowControls?.update(now);
+    arTuning?.update(now);
     const frame = memory.update(camera, canvas, now);
     camera.lookAt(0, memory.portalCenterY-0.15, -memory.portalDistance);
     // Only the review camera widens its view as the larger portal opens.
     // The phone AR camera always retains 8th Wall's calibrated projection.
     // Geometry and camera framing use the same frame's progress.
     const growth = frame.growth;
-    const halfView = THREE.MathUtils.lerp(0.36,0.68,growth);
-    const nextFov = THREE.MathUtils.radToDeg(2*Math.atan(Math.max(halfView,
-      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect)/memory.portalDistance));
+    const apertureWidth = THREE.MathUtils.lerp(memory.dimensions.photoWidth,memory.dimensions.portalWidth,growth);
+    const apertureHeight = THREE.MathUtils.lerp(memory.dimensions.photoHeight,memory.dimensions.portalHeight,growth);
+    const halfView = Math.max(THREE.MathUtils.lerp(0.36,0.68,growth),apertureHeight/2+0.18,
+      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect,(apertureWidth/2+0.08)/camera.aspect);
+    const nextFov = THREE.MathUtils.radToDeg(2*Math.atan(halfView/memory.portalDistance));
     if (camera.fov!==nextFov) { camera.fov=nextFov; camera.updateProjectionMatrix(); }
     camera.updateWorldMatrix(true, false);
     memory.updatePrompt(camera, canvas);
@@ -109,6 +130,7 @@ async function main() {
     document.getElementById("parallax-value").textContent = `${Number(parallaxGain.value).toFixed(1)}×`;
     document.getElementById("flat-effects-value").textContent = `${Math.round(Number(flatEffects.value)*100)}%`;
     renderer.render(scene, camera);
+    if (arTuning) canvas.dataset.programCount = renderer.info.programs.length;
   });
 }
 

@@ -7,6 +7,7 @@ import { createAnchor, anchorPoseFromCamera } from "./placement.js";
 import { createHud, trackingPrompt } from "./hud.js";
 import { createMemoryWindow } from "../memory-window.js";
 import { readMemorySettings } from "../memory-settings.js";
+import { createArTuning } from "./tuning.js";
 
 // Selectable with ?splats=full|50|25. Half the splats is the default because
 // Spark's sort and 8th Wall's SLAM share the phone's CPU; full is the native
@@ -40,8 +41,9 @@ function waitForXR8() {
 // scales the image to fit and everything comes out stretched.
 function sizeCanvas(canvas, dpr) {
   const { width, height } = canvas.getBoundingClientRect();
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
+  const nextWidth = Math.round(width * dpr), nextHeight = Math.round(height * dpr);
+  if (canvas.width !== nextWidth) canvas.width = nextWidth;
+  if (canvas.height !== nextHeight) canvas.height = nextHeight;
 }
 
 function formatView({ width, height, cssWidth, cssHeight, aspectError }) {
@@ -80,13 +82,16 @@ async function main() {
     anchor, splat, matte, config, button: activateButton, settings: readMemorySettings(window.location.search),
     onPhase: (phase) => hud.set({ memory: phase }),
   });
+  const tuning = createArTuning(memory,anchor);
   hud.prompt("Tap Start, then allow camera and motion access");
 
   let camera = null;
   let tracking = { status: "", reason: "" };
+  let preparationFailed = false;
+  let renderContext = null;
 
-  const place = () => {
-    if (!camera || tracking.status !== "NORMAL") return;
+  const place = async () => {
+    if (!camera || !memory.ready || tracking.status !== "NORMAL") return;
     const pose = anchorPoseFromCamera(camera);
     anchor.position.copy(pose.position);
     anchor.quaternion.copy(pose.quaternion);
@@ -97,29 +102,42 @@ async function main() {
     anchor.visible = true;
     resetButton.hidden = false;
     hud.set({ placed: true });
-    hud.prompt("");
+    hud.prompt("Preparing memory…");
+    try { await memory.prime(renderContext); hud.prompt(anchor.visible ? "" : trackingPrompt(tracking,false)); }
+    catch (err) { preparationFailed = true; hud.fail(err?.message ?? String(err)); }
   };
 
   const reset = () => {
+    tuning.stop();
     anchor.visible = false;
     memory.reset();
     resetButton.hidden = true;
     hud.set({ placed: false });
-    hud.prompt(trackingPrompt(tracking, false));
+    hud.prompt(memory.ready ? trackingPrompt(tracking, false) : "Preparing memory…");
   };
 
   const bridge = createThreeBridge({
-    onReady: ({ scene, camera: xrCamera }) => {
+    onReady: async ({ renderer, spark, scene, camera: xrCamera }) => {
       camera = xrCamera;
+      renderContext = { renderer, spark, scene, camera:xrCamera };
       scene.add(anchor);
+      hud.prompt("Preparing memory effects…");
+      try {
+        await memory.prepare({ renderer, spark, scene, camera:xrCamera,
+          beforeSample: (cam,seconds) => updateEffects(memory.effectsCamera(cam),seconds,memory.frame.effects),
+        });
+      } catch (err) { preparationFailed = true; throw err; }
+      tuning.update(performance.now()/1000);
+      hud.prompt(trackingPrompt(tracking,false));
     },
     onTracking: (next) => {
       tracking = next;
       hud.set({ tracking: `${next.status}${next.reason ? ` (${next.reason})` : ""}` });
-      if (!anchor.visible) hud.prompt(trackingPrompt(next, false));
+      if (!anchor.visible && !preparationFailed) hud.prompt(memory.ready ? trackingPrompt(next, false) : "Preparing memory effects…");
     },
     onBeforeRender: (xrCamera) => {
       const now = performance.now();
+      tuning.update(now/1000);
       const frame = memory.update(xrCamera, canvas, now / 1000);
       if (anchor.visible && frame.phase !== "dormant") {
         updateEffects(memory.effectsCamera(xrCamera), (now - effectsStart) / 1000, frame.effects);
@@ -127,10 +145,15 @@ async function main() {
     },
     onRendered: () => hud.tick(performance.now()),
     onView: (view) => hud.set({ view: formatView(view) }),
+    onError: (err) => hud.fail(err?.message ?? String(err)),
   });
 
   sizeCanvas(canvas, options.dpr);
-  new ResizeObserver(() => sizeCanvas(canvas, options.dpr)).observe(canvas);
+  let resizeFrame = null;
+  new ResizeObserver(() => {
+    if (resizeFrame !== null) return;
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = null; sizeCanvas(canvas, options.dpr); });
+  }).observe(canvas);
 
   startButton.addEventListener("click", async () => {
     startButton.disabled = true;

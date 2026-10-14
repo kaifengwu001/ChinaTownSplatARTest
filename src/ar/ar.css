@@ -19,7 +19,7 @@ body {
   /* Not 100vh: on iOS Safari that is the toolbar-hidden height, taller than
      what is visible, which stretches the render vertically. */
   width: 100%;
-  height: 100%;
+  height: calc(100% - var(--tuning-height, 0px));
   display: block;
 }
 
@@ -108,3 +108,32 @@ body {
 
 .memory-prompt:focus-visible { outline: 2px solid #fff0d6; outline-offset: 4px; }
 .memory-prompt[hidden] { display: none; }
+
+#ar-tune-toggle { position: fixed; right: 8px; bottom: calc(env(safe-area-inset-bottom) + 28px); z-index: 4; }
+#ar-tune-toggle, #ar-tuning button { padding: 7px 11px; border: 1px solid #ffffff30; border-radius: 14px; color: #eee3ce; background: #151a19ed; font: 11px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+#ar-tuning { position: fixed; bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px)); left: 0; right: 0; height: min(32dvh,280px); padding: 10px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; background: #151a19; border-top: 1px solid #ffffff30; z-index: 4; font: 11px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; touch-action: pan-y; }
+.ar-tune-heading { display: flex; align-items: center; justify-content: space-between; }
+.ar-tune-heading strong { font-size: 13px; font-weight: 500; }
+#ar-tune-tabs { display: flex; gap: 6px; }
+#ar-tuning button[aria-selected="true"], #ar-tuning button[aria-pressed="true"] { border-color: #d8b879; background: #d8b87925; }
+#ar-tune-sliders { border: 0; padding: 0 3px 3px; margin: 0; min-height: 0; overflow-y: auto; flex: 1; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 16px; align-content: start; }
+.ar-tune-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 8px; color: #bcc5c2; }
+.ar-tune-row output { color: #eee3ce; font-variant-numeric: tabular-nums; }
+#ar-tuning input[type="range"] { accent-color: #d8b879; width: 100%; margin: 0; touch-action: none; }
+.ar-tune-row input { grid-column: 1 / -1; }
+.ar-tune-timeline { display: grid; grid-template-columns: auto auto minmax(0,1fr); align-items: center; gap: 10px; }
+.ar-tune-timeline output { min-width: 30px; font-variant-numeric: tabular-nums; }
+.ar-tune-footer, #ar-tune-actions { display: flex; gap: 5px; }
+#ar-tune-actions { margin: 0; padding: 0; border: 0; }
+#ar-tuning button:disabled { opacity: 0.35; }
+body.tuning-open { touch-action: auto; }
+body.tuning-open #controls { bottom: calc(var(--tuning-height) + env(safe-area-inset-bottom) + 28px); }
+#camerafeed { touch-action: none; }
+body.tuning-open #prompt { top: calc((100% - var(--tuning-height))/2); }
+@media (max-width: 420px) { #ar-tuning button { padding: 7px 8px; font-size: 10px; } }
+@media (max-height: 500px) and (min-width: 600px) {
+  #ar-tuning { height: min(42dvh,190px); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto minmax(0,1fr) auto; }
+  #ar-tune-tabs { justify-content: flex-end; align-items: center; }
+  #ar-tune-sliders { grid-column: 1 / -1; grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .ar-tune-footer { justify-content: flex-end; }
+}
