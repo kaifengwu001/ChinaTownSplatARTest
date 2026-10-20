@@ -42,7 +42,7 @@ In portrait the sliders use two columns with a scrollable area. In landscape, th
 - **Particles:** the eight particle/ripple parameters listed above.
 - **Timing:** color, flat hold, and depth durations.
 
-**Original** restores the dormant photograph at the existing placement; **Replay** plays the full activation; **Loop ripple** repeats the color stage. The activation scrubber holds any frame while the ambient effects continue animating. **Defaults** restores the shared preset, and **Copy link** includes all 25 tuning values without a frozen playback/effects clock. All parameters work as URL keys on AR and memory preview. The same phone dock can be reviewed without a camera at `/memory.html?arControls=1`.
+**Original** restores the dormant photograph at the existing placement; **Replay** plays the full activation; **Loop ripple** repeats the color stage. The activation scrubber holds any frame while the ambient effects continue animating. **Defaults** restores the shared preset, and **Copy link** includes all 25 tuning values without a frozen playback/effects clock. All parameters work as URL keys on AR and memory preview. The address bar follows the tuning at most every quarter second, because Safari throws an error past 100 address updates in 10 seconds, which dragging a slider used to reach. The same phone dock can be reviewed without a camera at `/memory.html?arControls=1`.
 
 Layout and scene tuning update transforms and shader uniforms; they do not rebuild the splat generator, shader, or particle buffers. Photo geometry scales its existing UV-mapped plane, and the shared physical dimensions update the photograph, splats, particle wave, aperture, and tap target together.
 

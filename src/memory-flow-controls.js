@@ -1,4 +1,5 @@
 import { MEMORY_SETTINGS, PARTICLE_FLOW_PARAMETERS } from "./memory-settings.js";
+import { createAddressSync } from "./address-sync.js";
 
 const format = ({ unit }, value) => unit === "count" ? value.toLocaleString("en-US")
   : unit === "px" ? `${value.toFixed(1)} px`
@@ -15,6 +16,7 @@ export function createMemoryFlowControls(memory, settings, onPlay = () => {}) {
   const primaryPanel = document.getElementById("preview-controls");
   const compact = window.matchMedia("(max-width: 1100px)");
   const controls = new Map();
+  const address = createAddressSync();
   let values = Object.fromEntries(PARTICLE_FLOW_PARAMETERS.map(({ key }) => [key,settings[key]]));
   let loopStarted = null;
 
@@ -27,14 +29,14 @@ export function createMemoryFlowControls(memory, settings, onPlay = () => {}) {
   }
 
   function saveLink() {
-    const url = new URL(window.location.href);
+    const url = address.current();
     for (const { key } of PARTICLE_FLOW_PARAMETERS) url.searchParams.set(key,values[key]);
     for (const [key,id] of [["depthStretch","depth-stretch"],["parallaxGain","parallax-gain"],["flatEffectStrength","flat-effects"]]) {
       url.searchParams.set(key,document.getElementById(id).value);
     }
     // Save the inspected frame too, so a tuning link opens at a useful moment.
     url.searchParams.set("t",Math.min(memory.frame.seconds,memory.duration).toFixed(2));
-    history.replaceState(null,"",url);
+    address.set(url);
     return url.href;
   }
 
@@ -52,9 +54,9 @@ export function createMemoryFlowControls(memory, settings, onPlay = () => {}) {
     preview.setAttribute("aria-pressed","true");
     // A comparison clock must not silently freeze normal preview playback.
     onPlay();
-    const url = new URL(window.location.href);
+    const url = address.current();
     url.searchParams.delete("fxTime");
-    history.replaceState(null,"",url);
+    address.set(url);
     saveLink();
   }
 

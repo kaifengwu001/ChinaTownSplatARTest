@@ -1,5 +1,6 @@
 import { DEFAULTS } from "../config.js";
 import { MEMORY_SETTINGS, MEMORY_TUNING_PARAMETERS } from "../memory-settings.js";
+import { createAddressSync } from "../address-sync.js";
 
 const format = ({ unit }, value) => unit === "photoWidth" ? `${(value*DEFAULTS.windowWidth).toFixed(2)} m`
   : unit === "portalWidth" ? `${(value*DEFAULTS.windowWidth).toFixed(2)} m`
@@ -24,6 +25,7 @@ export function createArTuning(memory, anchor) {
   const time = document.getElementById("ar-tune-time-value");
   const actions = document.getElementById("ar-tune-actions");
   const inputs = new Map();
+  const address = createAddressSync();
   const groups = [...new Set(MEMORY_TUNING_PARAMETERS.map(p => p.group))];
   let group = groups[0];
   let loopStart = null;
@@ -62,13 +64,13 @@ export function createArTuning(memory, anchor) {
     }
   }
   function saveLink() {
-    const url = new URL(window.location.href);
+    const url = address.current();
     const values = memory.getSettings();
     for (const { key } of MEMORY_TUNING_PARAMETERS) url.searchParams.set(key,values[key]);
     // AR always starts with placement and the original, rather than a frozen
     // desktop review frame or a frozen ambient-effects clock.
     url.searchParams.delete("t"); url.searchParams.delete("fxTime");
-    history.replaceState(null,"",url);
+    address.set(url);
     return url.href;
   }
   function showGroup() {
