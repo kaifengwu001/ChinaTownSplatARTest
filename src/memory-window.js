@@ -87,16 +87,29 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
   let phase;
   let floorY = -1.5; // Preview default; AR uses XR8's estimated world ground before placement.
   let frame = memoryFrame(null, settings);
+  let opening = null; // The current aperture: { centerY, distance, width, height }.
   let ready = false;
   let preparing = null;
+  // Level the capture's street along the placement heading: its ground's up
+  // direction (in the splat mesh's flipped OpenCV-to-three.js frame) becomes
+  // the anchor's up, and the photographer's heading along the ground its forward.
+  const [groundX, groundY, groundZ] = settings.captureGroundUp;
+  const groundUp = new THREE.Vector3(groundX, -groundY, -groundZ).normalize();
+  const groundBack = new THREE.Vector3(0, 0, 1).addScaledVector(groundUp, -groundUp.z).normalize();
+  const level = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    new THREE.Vector3().crossVectors(groundUp, groundBack), groundUp, groundBack)).invert();
 
   function refreshLayout() {
     Object.assign(dimensions, memoryDimensions(config, texture.image.width/texture.image.height, settings));
     photo.scale.set(dimensions.photoWidth/baseDimensions.photoWidth, dimensions.photoHeight/baseDimensions.photoHeight, 1);
     material.uniforms.photoSize.value.set(dimensions.photoWidth,dimensions.photoHeight);
-    splat.pivot.scale.setScalar(settings.sceneScale);
-    splat.pivot.rotation.x = THREE.MathUtils.degToRad(settings.scenePitch);
-    splat.root.position.set(0,settings.sceneElevation,-settings.sceneDistance);
+    // Scale about where the street begins on the floor, which sits
+    // `sceneDistance` behind the portal plane on the portal's axis.
+    const scale = settings.sceneScale;
+    splat.pivot.quaternion.copy(level);
+    splat.pivot.scale.setScalar(scale);
+    splat.root.position.set(0, floorY+settings.captureCameraHeight*scale,
+      settings.captureGroundStart*scale-settings.portalDistance-settings.sceneDistance);
   }
 
   function apply(seconds, camera, dpr = 1) {
@@ -110,16 +123,20 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     // zero reveal hides it without discarding its warmed rendering resources.
     splat.root.visible = true;
     const { photoWidth, photoHeight, portalWidth, portalHeight } = dimensions;
-    const height = THREE.MathUtils.lerp(photoHeight, portalHeight, frame.growth);
-    const width = THREE.MathUtils.lerp(photoWidth, portalWidth, frame.growth);
     const placement = memoryPlacement(frame.growth, config, dimensions, settings, floorY);
+    // Grow the aperture in viewing angle, as the splats' rays do. It recedes in
+    // inverse depth, so growing it in metres made it balloon past the final
+    // portal's apparent size halfway through, then shrink back.
+    const grow = (from, to) => placement.distance*THREE.MathUtils.lerp(from/settings.photoDistance, to/settings.portalDistance, frame.growth);
+    const height = grow(photoHeight, portalHeight), width = grow(photoWidth, portalWidth);
+    opening = { centerY: placement.centerY, distance: placement.distance, width, height };
     // Scaling the matte also scales its rectangular hole; this avoids building
     // and discarding geometry on every frame of the height animation.
     matte.scale.y = height / baseDimensions.photoHeight;
     matte.scale.x = width / baseDimensions.photoWidth;
     matte.position.set(0, placement.centerY, -placement.distance);
     photo.position.copy(matte.position);
-    updateSplats(frame, camera, placement.targetCenterY);
+    updateSplats(frame, camera, opening);
     // The ripple finishes on the original plane before spatial expansion.
     particles.update(frame,dpr,settings.photoElevation,dimensions);
     if (phase !== frame.phase) {
@@ -158,16 +175,12 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     dimensions,
     get portalCenterY() { return memoryPlacement(frame.growth, config, dimensions, settings, floorY).centerY; },
     get portalDistance() { return memoryPlacement(frame.growth, config, dimensions, settings, floorY).distance; },
+    get aperture() { return opening; },
     effectsCamera(camera) {
-      // Ambient effects are evaluated in capture space. Undo the floor shift
-      // in their viewing direction so the sharp center follows the memory,
-      // rather than fading the entire photograph when the phone looks down.
+      // Ambient effects are evaluated in capture space. The settled street is
+      // the capture placed rigidly, so the live camera applies unchanged; the
+      // flat stage still uses the capture camera's own view.
       effectsForward.set(0,0,-1).transformDirection(camera.matrixWorld);
-      effectsPose.copy(anchor.matrixWorld).invert();
-      effectsForward.transformDirection(effectsPose);
-      const targetCenterY = floorY + settings.portalBottomHeight + dimensions.portalHeight/2;
-      effectsForward.y += targetCenterY/settings.portalDistance*effectsForward.z;
-      effectsForward.normalize().transformDirection(anchor.matrixWorld);
       captureForward.set(0,0,1).transformDirection(splat.mesh.matrixWorld);
       effectsForward.lerpVectors(captureForward,effectsForward,frame.growth).normalize();
       effectsCamera.position.setFromMatrixPosition(splat.mesh.matrixWorld)
@@ -179,6 +192,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, button,
     setFloor(localY) {
       if (!Number.isFinite(localY)) throw new Error("Floor height must be finite");
       floorY = localY;
+      refreshLayout();
     },
     setTuning(values) {
       const keys = MEMORY_TUNING_PARAMETERS.map(({ key }) => key);

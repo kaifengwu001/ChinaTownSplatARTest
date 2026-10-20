@@ -3,6 +3,7 @@ import { SparkRenderer } from "@sparkjsdev/spark";
 import { DEFAULTS } from "./config.js";
 import { loadSplatScene, placeSplatScene } from "./splat-scene.js";
 import { createMatte, updateMatte } from "./window-rig.js";
+import { SPLAT_ASSETS } from "./scene-assets.js";
 import { buildEffectModifier } from "../mattercraft/splatEffectGraph.ts";
 import {
   DEFAULT_EFFECT_SETTINGS,
@@ -19,7 +20,7 @@ import {
 //   ?fov=20                                 vertical field of view, to zoom in
 
 const EFFECTS = ["band", "periphery"];
-const ASSETS = Object.freeze({ full: "/chop_suey.sog", 50: "/chop_suey_50.sog", 25: "/chop_suey_25.sog" });
+const ASSETS = SPLAT_ASSETS;
 
 function readOptions(search) {
   const params = new URLSearchParams(search);

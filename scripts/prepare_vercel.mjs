@@ -4,9 +4,10 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SPLAT_ASSETS } from "../src/scene-assets.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const required = ["chop_suey.sog", "chop_suey_50.sog", "chop_suey_25.sog"];
+const required = Object.values(SPLAT_ASSETS).map((url) => url.slice(1));
 for (const file of required) {
   const path = resolve(root, "public", file);
   if (!existsSync(path) || statSync(path).size === 0) throw new Error(`Missing public/${file}. Restore the scene assets before deploying.`);

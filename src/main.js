@@ -5,8 +5,9 @@ import { DEFAULTS, geometry } from "./config.js";
 import { loadSplatScene, placeSplatScene } from "./splat-scene.js";
 import { createMatte, updateMatte, eyePosition } from "./window-rig.js";
 import { buildPanel, renderHud } from "./ui.js";
+import { SPLAT_ASSETS } from "./scene-assets.js";
 
-const SPLAT_URL = "/chop_suey.sog";
+const SPLAT_URL = SPLAT_ASSETS.full;
 
 async function main() {
   const canvas = document.getElementById("view");

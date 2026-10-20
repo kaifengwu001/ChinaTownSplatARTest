@@ -26,6 +26,7 @@ const deferred = () => {
 async function fixture(compile = async () => {}) {
   let generators = 0;
   const mesh = new THREE.Mesh();
+  mesh.rotation.x = Math.PI; // SHARP's OpenCV frame, as loadSplatScene sets it
   mesh.updateGenerator = () => { generators++; };
   mesh.updateVersion = () => {};
   const splat = { mesh, pivot:new THREE.Group(), root:new THREE.Group() };
@@ -146,8 +147,8 @@ test("original stays 0.4m ahead of the placement-time phone as the viewer moves"
     close(photo.getWorldPosition(new THREE.Vector3()).distanceTo(placed),0);
     f.memory.seek(f.memory.duration);
     const centerY = f.matte.getWorldPosition(new THREE.Vector3()).y;
-    close(centerY-f.memory.dimensions.portalHeight/2,.5);
-    close(centerY+f.memory.dimensions.portalHeight/2,1.5);
+    close(centerY-f.memory.dimensions.portalHeight/2,0);
+    close(centerY+f.memory.dimensions.portalHeight/2,4);
     f.memory.dispose();
   }
 });
@@ -161,24 +162,72 @@ test("live layout, scene and timing tuning preserves endpoints and reuses shader
   close(photo.getWorldPosition(new THREE.Vector3()).y,1.6);
   const generators = f.generators();
   memory.setTuning({ photoScale:1, photoDistance:.3, photoElevation:.2,
-    portalWidthScale:2, portalHeightScale:3, portalDistance:1.7, portalBottomHeight:.7,
-    sceneScale:1.4, sceneDistance:2, sceneElevation:-1, scenePitch:20,
+    portalWidthScale:2, portalHeightScale:3, portalDistance:1.7,
+    sceneScale:1.4, sceneDistance:2, spillStrength:2.5,
     colorDuration:3, flatHoldDuration:.5, depthDuration:4, depthStretch:3, parallaxGain:2 });
   memory.reset();
   close(photo.position.z,-.3); close(photo.position.y,.2); close(photo.scale.x,2);
   close(memory.dimensions.photoWidth,.4);
-  close(splat.pivot.scale.x,1.4); close(splat.root.position.z,-2);
-  close(splat.pivot.rotation.x,THREE.MathUtils.degToRad(20));
+  const { captureGroundStart, captureCameraHeight } = memory.getSettings();
+  close(splat.pivot.scale.x,1.4);
+  close(splat.root.position.z,captureGroundStart*1.4-1.7-2);
+  close(splat.root.position.y,-1.6+captureCameraHeight*1.4);
   close(memory.duration,7.5);
   memory.seek(memory.duration);
   close(matte.position.z,-1.7);
-  close(matte.getWorldPosition(new THREE.Vector3()).y-memory.dimensions.portalHeight/2,.7);
+  close(matte.getWorldPosition(new THREE.Vector3()).y-memory.dimensions.portalHeight/2,0);
   close(memory.dimensions.portalWidth,.8); close(memory.dimensions.portalHeight,1.2);
   assert.equal(f.generators(),generators,"Uniform tuning must not rebuild shader generators");
   const query = new URLSearchParams(Object.fromEntries(MEMORY_TUNING_PARAMETERS.map(({key}) => [key,memory.getSettings()[key]])));
   const parsed = readMemorySettings(query);
-  close(parsed.photoDistance,.3); close(parsed.sceneScale,1.4);
+  close(parsed.photoDistance,.3); close(parsed.sceneScale,1.4); close(parsed.sceneDistance,2); close(parsed.spillStrength,2.5);
+  assert.throws(() => memory.setTuning({ portalBottomHeight:.5 }),/Unknown tuning parameter/);
   assert.throws(() => memory.setTuning({ photoDistance:0 }));
   assert.throws(() => memory.setTuning({ particleSizeMin:9, particleSizeMax:2 }));
+  memory.dispose();
+});
+
+test("the street keeps its captured scale, its ground on the floor and its start sceneDistance behind the portal", async () => {
+  for (const [height,scale,distance] of [[1.6,1,-1],[1.2,1,2.5],[2,1.4,0]]) {
+    const f = await fixture();
+    const { memory,anchor,splat } = f;
+    anchor.position.set(1,height,-2);
+    anchor.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),.8);
+    memory.setFloor(-height);
+    memory.setTuning({ sceneScale:scale, sceneDistance:distance });
+    anchor.updateWorldMatrix(true,true);
+    const settings = memory.getSettings();
+    // SHARP's OpenCV frame: the ground below the photographer, and the street's start.
+    const up = new THREE.Vector3(...settings.captureGroundUp).normalize();
+    const ahead = new THREE.Vector3(0,0,1).addScaledVector(up,-up.z).normalize();
+    const start = up.clone().multiplyScalar(-settings.captureCameraHeight).addScaledVector(ahead,settings.captureGroundStart);
+    const placed = point => anchor.worldToLocal(point.clone().applyMatrix4(splat.mesh.matrixWorld));
+    const begins = placed(start);
+    close(begins.x,0); close(begins.y,-height); close(begins.z,-(settings.portalDistance+distance));
+    // Scaling happens about that start; the street runs straight ahead on the floor.
+    const further = placed(start.clone().addScaledVector(ahead,1));
+    close(further.x,0); close(further.y,-height); close(further.z,begins.z-scale);
+    const aside = placed(start.clone().add(new THREE.Vector3().crossVectors(up,ahead)));
+    close(aside.y,-height); close(Math.abs(aside.x),scale);
+    memory.dispose();
+  }
+});
+
+test("the aperture grows steadily in apparent size instead of ballooning past the portal", async () => {
+  const f = await fixture();
+  const { memory } = f;
+  await memory.prepare(f.context);
+  const { photoHeight, portalHeight } = memory.dimensions;
+  const { photoDistance, portalDistance, colorDuration, flatHoldDuration, depthDuration } = memory.getSettings();
+  let previous = photoHeight/photoDistance;
+  for (let step = 0; step <= 20; step++) {
+    memory.seek(colorDuration+flatHoldDuration+depthDuration*step/20);
+    const { height, distance } = memory.aperture;
+    const apparent = height/distance;
+    assert.ok(apparent >= previous-1e-9, `aperture shrank at step ${step}`);
+    assert.ok(apparent <= portalHeight/portalDistance+1e-9, `aperture overshot at step ${step}`);
+    previous = apparent;
+  }
+  close(previous,portalHeight/portalDistance);
   memory.dispose();
 });

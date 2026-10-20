@@ -1,5 +1,3 @@
-import { DEFAULTS } from "./config.js";
-
 // The original is bundled by Vite so the same asset works locally and on Vercel.
 // Projection metadata belongs to the COLOR photograph used to produce the SOG,
 // even when the original has slightly different dimensions or a different crop.
@@ -15,26 +13,40 @@ export const PARTICLE_FLOW_PARAMETERS = Object.freeze([
 ].map(Object.freeze));
 
 export const MEMORY_SETTINGS = Object.freeze({
-  photoUrl: new URL("../input/memory-original.jpg", import.meta.url).href,
-  colorPhotoUrl: new URL("../input/chop_suey.jpg", import.meta.url).href,
-  captureAspect: 1024 / 678,
+  photoUrl: new URL("../input/apalabassa-original.jpg", import.meta.url).href,
+  colorPhotoUrl: new URL("../input/apalabassa.jpg", import.meta.url).href,
+  captureAspect: 1448 / 1086,
   // SHARP assumed a 30mm lens on a 36x24mm sensor, using the image diagonal.
-  captureFocalRatio: 30 * Math.hypot(1024, 678) / Math.hypot(36, 24) / 1024,
+  captureFocalRatio: 30 * Math.hypot(1448, 1086) / Math.hypot(36, 24) / 1448,
+  // The capture's street, from scripts/fit_ground.py in SHARP's OpenCV frame:
+  // the ground's up direction, the camera's height above it, and how far ahead
+  // the reconstructed street begins. The photographer's camera was level.
+  // Update these with the reconstruction.
+  captureGroundUp: Object.freeze([-0.00371, -0.99997, -0.00705]),
+  captureCameraHeight: 1.7,
+  captureGroundStart: 3.78,
   colorDuration: 2.7,
   flatHoldDuration: 0.35,
   depthDuration: 3.1,
   photoScale: 0.5,
   photoDistance: 0.4,
   photoElevation: 0,
-  portalWidthScale: 1.5,
-  portalHeightScale: 2.5,
-  portalBottomHeight: 0.5,
-  portalDistance: DEFAULTS.windowDistance,
-  sceneScale: DEFAULTS.sceneScale,
-  sceneDistance: DEFAULTS.sceneOffsetZ,
-  sceneElevation: DEFAULTS.sceneOffsetY,
-  scenePitch: DEFAULTS.scenePitchDeg,
-  depthStretch: 2,
+  // Tuned on a phone: a 1.6 x 4 m portal standing on the estimated floor
+  // 3.44 m ahead of the placement-time phone.
+  portalWidthScale: 4,
+  portalHeightScale: 10,
+  portalDistance: 3.44,
+  // The street, with its ground on the floor, at 0.85 of its captured size.
+  sceneScale: 0.85,
+  // From the portal plane to where the street begins. Below zero, the street's
+  // ground spills through the portal onto the floor in front of it.
+  sceneDistance: -2.03,
+  // The spill is a fan of light from the portal's sides: its full angle, and
+  // the penumbra angle by which its edges blur wider with distance.
+  spillStrength: 6.3,
+  spillAngle: 31,
+  spillSoftness: 60,
+  depthStretch: 1,
   parallaxGain: 1,
   flatEffectStrength: 1,
   ...Object.fromEntries(PARTICLE_FLOW_PARAMETERS.map(({ key, value }) => [key, value])),
@@ -44,14 +56,14 @@ export const MEMORY_TUNING_PARAMETERS = Object.freeze([
   { key: "photoScale", label: "Image width", min: 0.125, max: 3, step: 0.025, unit: "photoWidth", group: "Layout" },
   { key: "photoDistance", label: "Image distance", min: 0.15, max: 2, step: 0.01, unit: "m", group: "Layout" },
   { key: "photoElevation", label: "Image height offset", min: -1, max: 1, step: 0.01, unit: "m", group: "Layout" },
-  { key: "portalWidthScale", label: "Portal width", min: 0.5, max: 4, step: 0.05, unit: "portalWidth", group: "Layout" },
-  { key: "portalHeightScale", label: "Portal height", min: 0.5, max: 5, step: 0.05, unit: "portalHeight", group: "Layout" },
-  { key: "portalDistance", label: "Portal distance", min: 0.3, max: 3, step: 0.01, unit: "m", group: "Layout" },
-  { key: "portalBottomHeight", label: "Portal bottom height", min: 0, max: 2, step: 0.01, unit: "m", group: "Layout" },
+  { key: "portalWidthScale", label: "Portal width", min: 0.5, max: 6, step: 0.05, unit: "portalWidth", group: "Layout" },
+  { key: "portalHeightScale", label: "Portal height", min: 0.5, max: 15, step: 0.05, unit: "portalHeight", group: "Layout" },
+  { key: "portalDistance", label: "Portal distance", min: 0.3, max: 5, step: 0.01, unit: "m", group: "Layout" },
   { key: "sceneScale", label: "Scene size", min: 0.2, max: 3, step: 0.01, unit: "gain", group: "Scene" },
-  { key: "sceneDistance", label: "Scene distance", min: 0, max: 5, step: 0.01, unit: "m", group: "Scene" },
-  { key: "sceneElevation", label: "Scene height", min: -3, max: 2, step: 0.01, unit: "m", group: "Scene" },
-  { key: "scenePitch", label: "Scene tilt", min: -30, max: 30, step: 0.1, unit: "deg", group: "Scene" },
+  { key: "sceneDistance", label: "Scene distance", min: -3, max: 12, step: 0.01, unit: "m", group: "Scene" },
+  { key: "spillStrength", label: "Ground spill", min: 0, max: 8, step: 0.05, unit: "gain", group: "Scene" },
+  { key: "spillAngle", label: "Spill angle", min: 20, max: 170, step: 1, unit: "deg", group: "Scene" },
+  { key: "spillSoftness", label: "Spill edge blur", min: 0, max: 80, step: 1, unit: "deg", group: "Scene" },
   { key: "depthStretch", label: "Depth stretch", min: 0.5, max: 4, step: 0.1, unit: "gain", group: "Scene" },
   { key: "parallaxGain", label: "Parallax strength", min: 1, max: 4, step: 0.1, unit: "gain", group: "Scene" },
   { key: "flatEffectStrength", label: "Flat dream effects", min: 0, max: 1, step: 0.05, unit: "percent", group: "Scene" },

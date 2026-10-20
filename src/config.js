@@ -13,9 +13,9 @@ export const DEFAULTS = Object.freeze({
   windowHeight: 0.4,
   windowDistance: 1.28,
 
-  // Placement of the SHARP scene behind the window plane.
-  // SHARP's nearest content sits ~1.5m from the original camera, so it must be
-  // pushed back far enough to clear the window or it pokes through the frame.
+  // Placement of the SHARP scene behind the window plane for this preview.
+  // SHARP's reconstruction is metric: its nearest content sits ~3.6 m from
+  // the original camera (the street begins 3.5 m ahead), buildings ~20-35 m.
   sceneOffsetZ: 1.12,
   sceneScale: 0.99,
 
@@ -70,6 +70,6 @@ export function geometry(config) {
     availableHalfCone,
     headroomDeg: availableHalfCone - neededHalfCone,
     vSubtenseDeg: 2 * deg(Math.atan(windowHeight / 2 / windowDistance)),
-    nearestContentZ: -(1.53 * config.sceneScale + config.sceneOffsetZ),
+    nearestContentZ: -(3.6 * config.sceneScale + config.sceneOffsetZ),
   };
 }

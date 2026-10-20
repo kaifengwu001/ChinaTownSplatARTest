@@ -9,16 +9,12 @@ import { createAnchor, anchorPoseFromCamera } from "./placement.js";
 import { createHud, trackingPrompt } from "./hud.js";
 import { createMemoryWindow } from "../memory-window.js";
 import { readMemorySettings } from "../memory-settings.js";
+import { SPLAT_ASSETS as ASSETS } from "../scene-assets.js";
 import { createArTuning } from "./tuning.js";
 
 // Selectable with ?splats=full|50|25. Half the splats is the default because
 // Spark's sort and 8th Wall's SLAM share the phone's CPU; full is the native
 // app's asset for comparison.
-const ASSETS = Object.freeze({
-  full: "/chop_suey.sog",
-  50: "/chop_suey_50.sog",
-  25: "/chop_suey_25.sog",
-});
 
 function readOptions(search) {
   const params = new URLSearchParams(search);

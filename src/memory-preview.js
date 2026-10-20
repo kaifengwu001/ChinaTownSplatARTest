@@ -7,11 +7,14 @@ import { createMatte } from "./window-rig.js";
 import { createAnchor } from "./ar/placement.js";
 import { createMemoryWindow } from "./memory-window.js";
 import { readMemorySettings } from "./memory-settings.js";
+import { SPLAT_ASSETS } from "./scene-assets.js";
 import { createMemoryFlowControls } from "./memory-flow-controls.js";
 import { createArTuning } from "./ar/tuning.js";
 
 const STAGES = { dormant: "A photograph, waiting", colorizing: "Color ripples across the surface", surface: "The reconstructed photograph", expanding: "The street opens into depth", active: "A window into the memory" };
-const ASSETS = { full: "/chop_suey.sog", 50: "/chop_suey_50.sog", 25: "/chop_suey_25.sog" };
+const ASSETS = SPLAT_ASSETS;
+// The review eye stands 1.5 m above the floor, like a phone held at placement.
+const FLOOR_Y = -1.5;
 
 async function main() {
   const params = new URLSearchParams(window.location.search);
@@ -53,7 +56,7 @@ async function main() {
     onPhase: (phase) => { document.getElementById("stage").textContent = STAGES[phase]; },
   });
   anchor.visible = true;
-  memory.setFloor(-1.5);
+  memory.setFloor(FLOOR_Y);
   document.getElementById("stage").textContent = "Preparing effects…";
   document.getElementById("preview-instructions").textContent = "Preparing memory effects…";
   renderer.setSize(window.innerWidth,window.innerHeight,false);
@@ -66,7 +69,7 @@ async function main() {
   const flowControls = showControls ? createMemoryFlowControls(memory,settings,() => { frozenFxTime = null; }) : null;
   const arTuning = params.get("arControls") === "1" ? createArTuning(memory,anchor) : null;
   const floor = new THREE.GridHelper(10,40,0x405553,0x283b39);
-  floor.position.y = -1.5;
+  floor.position.y = FLOOR_Y;
   floor.renderOrder = -2;
   floor.material.depthWrite = false;
   scene.add(floor);
@@ -110,16 +113,25 @@ async function main() {
     flowControls?.update(now);
     arTuning?.update(now);
     const frame = memory.update(camera, canvas, now);
-    camera.lookAt(0, memory.portalCenterY-0.15, -memory.portalDistance);
     // Only the review camera widens its view as the larger portal opens.
     // The phone AR camera always retains 8th Wall's calibrated projection.
     // Geometry and camera framing use the same frame's progress.
     const growth = frame.growth;
-    const apertureWidth = THREE.MathUtils.lerp(memory.dimensions.photoWidth,memory.dimensions.portalWidth,growth);
-    const apertureHeight = THREE.MathUtils.lerp(memory.dimensions.photoHeight,memory.dimensions.portalHeight,growth);
-    const halfView = Math.max(THREE.MathUtils.lerp(0.36,0.68,growth),apertureHeight/2+0.18,
-      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect,(apertureWidth/2+0.08)/camera.aspect);
-    const nextFov = THREE.MathUtils.radToDeg(2*Math.atan(halfView/memory.portalDistance));
+    const { width: apertureWidth, height: apertureHeight, centerY, distance } = memory.aperture;
+    // Frame the aperture and the floor in front of it, where the street spills,
+    // measured as heights on the aperture's plane. The floor comes into view
+    // as the street spills onto it, from early in the expansion.
+    const settle = THREE.MathUtils.smoothstep(growth,0.2,1);
+    const spill = settle*Math.min(Math.max(-memory.getSettings().sceneDistance,0),distance-0.3);
+    const top = centerY+apertureHeight/2+0.1;
+    const apertureBottom = centerY-apertureHeight/2;
+    const bottom = THREE.MathUtils.lerp(apertureBottom,Math.min(apertureBottom,FLOOR_Y*distance/(distance-spill)),settle)-0.1;
+    // Never wider than 100 degrees, which would distort the review. When both
+    // do not fit, keep the top of the aperture in view and crop the near floor.
+    const halfView = Math.min(Math.max(THREE.MathUtils.lerp(0.36,0.68,growth),(top-bottom)/2,
+      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect,(apertureWidth/2+0.08)/camera.aspect),distance*Math.tan(THREE.MathUtils.degToRad(50)));
+    camera.lookAt(0, Math.max((top+bottom)/2, top-halfView), -distance);
+    const nextFov = THREE.MathUtils.radToDeg(2*Math.atan(halfView/distance));
     if (camera.fov!==nextFov) { camera.fov=nextFov; camera.updateProjectionMatrix(); }
     camera.updateWorldMatrix(true, false);
     memory.updatePrompt(camera, canvas);

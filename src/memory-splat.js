@@ -2,9 +2,46 @@ import * as THREE from "three";
 import { dyno } from "@sparkjsdev/spark";
 import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 
+// The street never begins nearer the placement point than this, so every
+// visible splat keeps a viewing ray from that point (see `reachable` below).
+export const STREET_START_MIN = 0.15;
+
+const SPILL_LIGHT_GLSL = /* glsl */ `
+  // Daylight on the floor d in front of a doorway's centre, its sill on the
+  // floor: twice the form factor from that point to the opening, 1 at the sill.
+  float doorwayLight(float d, vec2 size) {
+    d = max(d, 1e-4);
+    float r = length(vec2(d, size.y));
+    float sill = 2.0*atan(0.5*size.x/d);
+    float lintel = 2.0*atan(0.5*size.x/r);
+    return max(0.0, (sill-d/r*lintel)/3.14159265);
+  }
+  // The spill is a fan whose edges leave the portal's sides at spreadTan (the
+  // tangent of half the fan angle). Like daylight it dims with distance, rolling
+  // off smoothly through an exposure curve that is 1 at the threshold rather
+  // than clipping into a flat plateau. Like a penumbra its edges are a smooth
+  // sigmoid, with soft tails, widening the further they are from the portal.
+  float spillLight(float x, float d, vec2 size, float strength, float spreadTan, float blurRate) {
+    if (strength <= 0.0) return 0.0;
+    float exposure = (1.0-exp(-strength*doorwayLight(d, size)))/(1.0-exp(-strength));
+    float edge = abs(x)-0.5*size.x-d*spreadTan;
+    float blur = 0.03+blurRate*d;
+    return exposure/(1.0+exp(4.0*edge/blur));
+  }
+  // C2 ease from 0 to 1, flat at both ends.
+  float smoother(float x) {
+    x = clamp(x, 0.0, 1.0);
+    return x*x*x*(x*(6.0*x-15.0)+10.0);
+  }
+`;
+
+/** Tangent of an angle in degrees: for the spill's half fan angle and penumbra. */
+const tangent = (degrees) => Math.tan(THREE.MathUtils.degToRad(degrees));
+
 /** Deform centers AND covariance with the same spatial mapping. */
 export function attachMemoryModifier(mesh, anchor, config, dimensions, settings) {
   const photoSize = new THREE.Vector2(dimensions.photoWidth, dimensions.photoHeight);
+  const portalSize = new THREE.Vector2(dimensions.portalWidth, dimensions.portalHeight);
   const u = {
     color: dyno.dynoFloat(-0.15), motion: dyno.dynoFloat(0), seconds: dyno.dynoFloat(0),
     meshFromAnchor: dyno.dynoMat4(new THREE.Matrix4()),
@@ -13,15 +50,19 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     sheetRadius: dyno.dynoFloat(settings.photoDistance),
     photoSize: dyno.dynoVec2(photoSize.clone()), photoDistance: dyno.dynoFloat(settings.photoDistance),
     portalDistance: dyno.dynoFloat(settings.portalDistance), photoElevation: dyno.dynoFloat(settings.photoElevation),
-    centerY: dyno.dynoFloat(0), stretch: dyno.dynoFloat(settings.depthStretch),
+    portalSize: dyno.dynoVec2(portalSize.clone()), streetStart: dyno.dynoFloat(STREET_START_MIN),
+    spill: dyno.dynoFloat(settings.spillStrength), stretch: dyno.dynoFloat(settings.depthStretch),
+    spillSpread: dyno.dynoFloat(tangent(settings.spillAngle/2)), spillBlur: dyno.dynoFloat(tangent(settings.spillSoftness)),
+    aperture: dyno.dynoVec4(new THREE.Vector4(0, settings.photoDistance, dimensions.photoWidth, dimensions.photoHeight)),
     parallax: dyno.dynoFloat(settings.parallaxGain),
     ...Object.fromEntries(["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"].map(key => [key,dyno.dynoFloat(settings[key])])),
   };
   const modifier = dyno.dyno({
-    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", centerY: "float", stretch: "float", parallax: "float", photoSize: "vec2", photoDistance: "float", portalDistance: "float", photoElevation: "float",
+    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", stretch: "float", parallax: "float", photoSize: "vec2", photoDistance: "float", portalDistance: "float", photoElevation: "float",
+      portalSize: "vec2", streetStart: "float", spill: "float", spillSpread: "float", spillBlur: "float", aperture: "vec4",
       rippleDiameter: "float", transitionWidth: "float", flowStrength: "float", flowSpeed: "float", rippleTurbulence: "float" },
     outTypes: { covsplat: dyno.CovSplat }, inputs: u,
-    globals: () => [dyno.defineCovSplat, MEMORY_WAVE_GLSL],
+    globals: () => [dyno.defineCovSplat, MEMORY_WAVE_GLSL, SPILL_LIGHT_GLSL],
     statements: ({ inputs: i, outputs: o }) => [/* glsl */ `
       ${o.covsplat} = ${i.covsplat};
       if (isCovSplatActive(${i.covsplat}.flags)) {
@@ -48,20 +89,42 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         vec3 ax = vec3(A[0].x,A[1].x,A[2].x);
         vec3 ay = vec3(A[0].y,A[1].y,A[2].y);
         vec3 az = vec3(A[0].z,A[1].z,A[2].z);
+        // The settled street is the capture itself, placed rigidly with its
+        // ground on the floor. Depth stretch scales only distances BEHIND the
+        // portal plane, along its normal, so that ground stays level.
         vec3 base = (${i.anchorFromMesh}*vec4(p,1.0)).xyz;
-        float baseDepth = max(-base.z,0.01);
-        float stretchedDepth = ${i.portalDistance}+${i.stretch}*(baseDepth-${i.portalDistance});
-        float targetDepth = max(stretchedDepth, ${i.portalDistance}+0.01);
-        vec3 targetDepthDerivative = stretchedDepth > ${i.portalDistance}+0.01 ? -${i.stretch}*az : vec3(0.0);
-        // Depth stretching preserves the center view. Extra parallax is a
-        // camera-dependent shear about the WINDOW plane, which stays anchored.
+        float behind = -base.z-${i.portalDistance};
+        float stretch = behind > 0.0 ? ${i.stretch} : 1.0;
+        vec3 target = vec3(base.xy, base.z-(stretch-1.0)*behind);
+        vec3 tz = stretch*az;
+        // The street in front of the portal spills out like daylight through a
+        // doorway: a fan of light, brightest at the threshold.
+        float spillDistance = target.z+${i.portalDistance};
+        float light = spillDistance > 0.0
+          ? spillLight(target.x, spillDistance, ${i.portalSize}, ${i.spill}, ${i.spillSpread}, ${i.spillBlur}) : 1.0;
+        // When the street starts in front of the portal, its cut-off edge fades
+        // over most of the spilled strip, so the spill trails off rather than
+        // ending in a rim.
+        float fadeLength = max(0.6, 0.8*(${i.portalDistance}-${i.streetStart}));
+        float street = smoother((-base.z-${i.streetStart})/fadeLength);
+        // The street start stays ahead of the placement point, so every visible
+        // splat has a viewing ray from it. Hidden ones nearer than that travel
+        // toward the portal plane instead while they fade.
+        bool reachable = -target.z > 0.1;
+        vec3 travel = reachable ? target : vec3(target.xy, -${i.portalDistance});
+        float targetDepth = -travel.z;
+        vec3 targetDepthDerivative = reachable ? -tz : vec3(0.0);
+        // Extra parallax is a camera-dependent shear about the WINDOW plane,
+        // applied only to the street behind it.
         vec2 cameraShear = (${i.parallax}-1.0)*${i.eye}.xy/max(${i.portalDistance}+${i.eye}.z,0.15);
-        vec2 targetRay = base.xy/baseDepth + vec2(0.0,${i.centerY}/${i.portalDistance})
-          + cameraShear*(1.0-${i.portalDistance}/targetDepth);
-        vec3 rayXDerivative = ax/baseDepth + base.x/(baseDepth*baseDepth)*az
-          + cameraShear.x*${i.portalDistance}/(targetDepth*targetDepth)*targetDepthDerivative;
-        vec3 rayYDerivative = ay/baseDepth + base.y/(baseDepth*baseDepth)*az
-          + cameraShear.y*${i.portalDistance}/(targetDepth*targetDepth)*targetDepthDerivative;
+        float shear = max(0.0, 1.0-${i.portalDistance}/targetDepth);
+        vec3 shearDerivative = shear > 0.0
+          ? ${i.portalDistance}/(targetDepth*targetDepth)*targetDepthDerivative : vec3(0.0);
+        vec2 targetRay = travel.xy/targetDepth + cameraShear*shear;
+        vec3 rayXDerivative = ax/targetDepth - travel.x/(targetDepth*targetDepth)*targetDepthDerivative
+          + cameraShear.x*shearDerivative;
+        vec3 rayYDerivative = ay/targetDepth - travel.y/(targetDepth*targetDepth)*targetDepthDerivative
+          + cameraShear.y*shearDerivative;
 
         float t = ${i.motion};
         float sheetDepth = ${i.photoDistance}+0.006;
@@ -120,14 +183,51 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
         // decimated SHARP samples; endpoints keep their original footprints.
         float overlap = 1.0+0.12*sin(t*3.14159265)*sin(t*3.14159265);
         covariance *= overlap*overlap;
+        vec3 settled = vec3(ray*depth,-depth);
+        // While the aperture recedes, ground bound for the floor in front of
+        // the portal is still behind it, and the matte would hide that ground
+        // just below the opening: a gap between the portal and the spill. Hold
+        // it just in front of the aperture instead, sliding it along the
+        // viewer's line of sight so its place and size on screen do not change.
+        if (spillDistance > 0.0 && t < 1.0 && -${i.eye}.z < ${i.aperture}.y && -settled.z > 0.97*${i.aperture}.y) {
+          float pull = (-0.97*${i.aperture}.y-${i.eye}.z)/(settled.z-${i.eye}.z);
+          settled = ${i.eye}+(settled-${i.eye})*pull;
+          covariance *= pull*pull;
+        }
         covariance[2][2] += 1e-10;
         mat3 back = mat3(${i.meshFromAnchor});
         covariance = back*covariance*transpose(back);
-        ${o.covsplat}.center = (${i.meshFromAnchor}*vec4(ray*depth,-depth,1.0)).xyz;
+        ${o.covsplat}.center = (${i.meshFromAnchor}*vec4(settled,1.0)).xyz;
         ${o.covsplat}.xxyyzz = vec3(covariance[0][0],covariance[1][1],covariance[2][2]);
         ${o.covsplat}.xyxzyz = vec3(covariance[0][1],covariance[0][2],covariance[1][2]);
         float inside = step(0.0,uv.x)*step(uv.x,1.0)*step(0.0,uv.y)*step(uv.y,1.0);
-        ${o.covsplat}.rgba.a *= mix(reveal*inside,1.0,t);
+        float alpha = ${i.covsplat}.rgba.a*mix(reveal*inside,1.0,t);
+        // About 1.5 nearly opaque SHARP splats overlap at each point of the
+        // ground (1.2-1.7 across the full, 50% and 25% assets), so fading each
+        // one by the light would compound into a harder edge. Sharing the light's
+        // optical depth among them, equally, keeps the spill's fades smooth: a
+        // per-splat share made neighbouring splats fade unevenly, a speckle.
+        float visibility = light*street;
+        float settledAlpha = visibility < 1.0
+          ? min(alpha, 1.0-exp(log(max(1.0-visibility, 1e-4))/1.5)) : alpha;
+        // The spilled ground reads as light: slightly brighter than the street,
+        // evenly, so its fading edges stay smooth rather than glinting.
+        if (spillDistance > 0.0) ${o.covsplat}.rgba.rgb *= 1.0+0.15*t;
+        // The matte occludes a splat at its centre's depth only, so a large
+        // splat just behind it can paint past the opening onto the floor in
+        // front of the portal. Drop splats whose centres the viewer cannot see
+        // through the aperture; the matte trims the rest per pixel.
+        vec4 aperture = ${i.aperture}; // centre height, distance, width, height
+        float seen = 1.0;
+        if (-settled.z > aperture.y && -${i.eye}.z < aperture.y) {
+          vec3 toSplat = settled-${i.eye};
+          float atPlane = (-aperture.y-${i.eye}.z)/toSplat.z;
+          vec2 crossing = abs(${i.eye}.xy+toSplat.xy*atPlane-vec2(0.0, aperture.x));
+          seen = step(crossing.x, 0.5*aperture.z+0.01)*step(crossing.y, 0.5*aperture.w+0.01);
+        }
+        // Splats that settle dim or hidden fade early in the expansion rather
+        // than streaking across the room on their way out of the portal.
+        ${o.covsplat}.rgba.a = seen*mix(alpha, settledAlpha, smoothstep(0.0,0.12,t));
       }
     `],
   });
@@ -135,8 +235,10 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
   mesh.updateGenerator();
   const relative = new THREE.Matrix4();
   const eye = new THREE.Vector3();
+  const aperture = new THREE.Vector4();
   let previousPhase;
-  return (frame, camera, centerY) => {
+  /** `opening` is the current aperture: { centerY, distance, width, height }. */
+  return (frame, camera, opening) => {
     anchor.updateWorldMatrix(true,true);
     relative.copy(anchor.matrixWorld).invert().multiply(mesh.matrixWorld);
     const transformChanged = !u.anchorFromMesh.value.equals(relative);
@@ -148,11 +250,24 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
       anchor.worldToLocal(eye);
     }
     photoSize.set(dimensions.photoWidth, dimensions.photoHeight);
-    const changed = transformChanged || !u.eye.value.equals(eye) || u.centerY.value !== centerY
+    portalSize.set(dimensions.portalWidth, dimensions.portalHeight);
+    const streetStart = Math.max(settings.portalDistance+settings.sceneDistance, STREET_START_MIN);
+    aperture.set(opening.centerY, opening.distance, opening.width, opening.height);
+    const spillSpread = tangent(settings.spillAngle/2), spillBlur = tangent(settings.spillSoftness);
+    const changed = transformChanged || !u.eye.value.equals(eye)
       || u.stretch.value !== settings.depthStretch || u.parallax.value !== settings.parallaxGain
       || !u.photoSize.value.equals(photoSize) || u.photoDistance.value !== settings.photoDistance
-      || u.portalDistance.value !== settings.portalDistance || u.photoElevation.value !== settings.photoElevation;
+      || u.portalDistance.value !== settings.portalDistance || u.photoElevation.value !== settings.photoElevation
+      || !u.portalSize.value.equals(portalSize) || u.streetStart.value !== streetStart
+      || u.spill.value !== settings.spillStrength || u.spillSpread.value !== spillSpread
+      || u.spillBlur.value !== spillBlur || !u.aperture.value.equals(aperture);
     u.photoSize.value.copy(photoSize);
+    u.portalSize.value.copy(portalSize);
+    u.spillSpread.value = spillSpread;
+    u.spillBlur.value = spillBlur;
+    u.aperture.value.copy(aperture);
+    u.streetStart.value = streetStart;
+    u.spill.value = settings.spillStrength;
     for (const key of ["photoDistance","portalDistance","photoElevation"]) u[key].value = settings[key];
     u.eye.value.copy(eye);
     // Start the shell behind the furthest photo corner, keeping it behind the
@@ -166,7 +281,6 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
       }
       u.sheetRadius.value = sheetRadius+0.006;
     }
-    u.centerY.value = centerY;
     u.stretch.value = settings.depthStretch;
     u.parallax.value = settings.parallaxGain;
     for (const key of ["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"]) u[key].value=settings[key];
