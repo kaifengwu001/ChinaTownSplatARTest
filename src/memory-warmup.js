@@ -1,5 +1,16 @@
 import * as THREE from "three";
 
+// Window animation frames can pause while an immersive WebXR session presents,
+// so polling also falls back to a short timer.
+function nextFrame() {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    requestAnimationFrame(finish);
+    setTimeout(finish, 50);
+  });
+}
+
 // update() can return early when another sort is running. Its completion is
 // only safe to use once the queued automatic update and all sorts have drained.
 export async function waitForSplatWork(spark, gl) {
@@ -7,7 +18,7 @@ export async function waitForSplatWork(spark, gl) {
   while (spark.sorting || spark.sortDirty || (spark.updateTimeoutId != null && spark.updateTimeoutId !== -1)) {
     if (gl.isContextLost?.()) throw new Error("GPU context lost while preparing memory");
     if (performance.now() > deadline) throw new Error("Memory splat preparation timed out");
-    await new Promise(resolve => requestAnimationFrame(resolve));
+    await nextFrame();
   }
 }
 
@@ -20,7 +31,7 @@ export function finishGpu(gl) {
     const deadline = performance.now()+30000;
     const check = () => {
       const status = gl.clientWaitSync(fence,0,0);
-      if (status === gl.TIMEOUT_EXPIRED && performance.now() < deadline && !gl.isContextLost?.()) { requestAnimationFrame(check); return; }
+      if (status === gl.TIMEOUT_EXPIRED && performance.now() < deadline && !gl.isContextLost?.()) { nextFrame().then(check); return; }
       gl.deleteSync(fence);
       if (status === gl.WAIT_FAILED || status === gl.TIMEOUT_EXPIRED) reject(new Error("GPU effects preparation failed"));
       else resolve();

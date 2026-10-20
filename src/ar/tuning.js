@@ -14,7 +14,8 @@ const TUNING_MARKUP = "    <button id=\"ar-tune-toggle\" type=\"button\" aria-co
 
 /** A dedicated dock below the camera; tuning gestures never place a window. */
 export function createArTuning(memory, anchor) {
-  if (!document.getElementById("ar-tuning")) document.body.insertAdjacentHTML("beforeend",TUNING_MARKUP);
+  // Inside the AR overlay when there is one, so the dock stays visible in WebXR.
+  if (!document.getElementById("ar-tuning")) (document.getElementById("ar-ui") ?? document.body).insertAdjacentHTML("beforeend",TUNING_MARKUP);
   const panel = document.getElementById("ar-tuning");
   const toggle = document.getElementById("ar-tune-toggle");
   const tabs = document.getElementById("ar-tune-tabs");

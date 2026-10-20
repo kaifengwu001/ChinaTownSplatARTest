@@ -6,6 +6,7 @@ export function createHud(hudEl, promptEl, { debug = false } = {}) {
   let fields = Object.freeze({
     asset: "",
     splats: null,
+    tracker: "",
     tracking: "starting",
     placed: false,
     memory: "dormant",
@@ -22,6 +23,7 @@ export function createHud(hudEl, promptEl, { debug = false } = {}) {
     hudEl.textContent = [
       `splats   ${splats} (${fields.asset})`,
       `fps      ${fields.fps.toFixed(0)}`,
+      `tracker  ${fields.tracker}`,
       `tracking ${fields.tracking}`,
       `memory   ${fields.memory}`,
       `headroom ${fields.headroom.toFixed(1)}°`,

@@ -5,20 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <title>Parallax Window (WebAR)</title>
     <link rel="stylesheet" href="/src/ar/ar.css" />
-    <!-- 8th Wall engine binary (closed source, limited-use license; see
-         /external/xr/LICENSE). `slam` preloads the world tracking chunk. -->
-    <script src="/external/xr/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+    <!-- main.js loads the 8th Wall engine only when WebXR AR is unavailable. -->
   </head>
   <body>
     <canvas id="camerafeed"></canvas>
-    <div id="hud" hidden></div>
-    <div id="prompt"></div>
-    <button id="activate-memory" class="memory-prompt" type="button" hidden>tap to activate memory</button>
-    <div id="controls">
-      <button id="start" type="button" disabled>Start AR</button>
-      <button id="reset" type="button" hidden>Reset window</button>
+    <!-- Everything drawn over the AR view. WebXR shows this element as its
+         DOM overlay, so it must not contain the canvas. -->
+    <div id="ar-ui">
+      <div id="ar-tap" aria-hidden="true"></div>
+      <div id="hud" hidden></div>
+      <div id="prompt"></div>
+      <button id="activate-memory" class="memory-prompt" type="button" hidden>tap to activate memory</button>
+      <div id="controls">
+        <button id="start" type="button" disabled>Start AR</button>
+        <button id="reset" type="button" hidden>Reset window</button>
+      </div>
+      <div id="credit">AR engine © 2026 Niantic Spatial, Inc. · <a href="/external/xr/LICENSE">license</a></div>
     </div>
-    <div id="credit">AR engine © 2026 Niantic Spatial, Inc. · <a href="/external/xr/LICENSE">license</a></div>
     <script type="module" src="/src/ar/main.js"></script>
   </body>
 </html>

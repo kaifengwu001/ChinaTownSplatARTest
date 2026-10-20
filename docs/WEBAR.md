@@ -84,3 +84,13 @@ For a complete release, link the existing project with `vercel link --yes --proj
 Desktop browser verification covers the shader compilation, all activation stages, tap hit testing, sideways viewing, reset/replay, and a 390×844 viewport. Actual mobile camera tracking, Safari rendering, and frame rate require a device check. Existing GitHub and Vercel terminal sessions are used for sync and publication; only an expired or missing login needs user interaction.
 
 To check the flat/depth boundary, load `/memory.html?controls=1&t=3&fxTime=3&flatEffectStrength=0.25` and scrub between 3.0 and 3.2 s. Also compare 3.05 and 3.06 s, immediately around expansion's start. Repeat with `&fx=none` to isolate splat ordering from ambient effects and use the sideways slider to check that the flat image stays anchored when the viewing direction changes.
+
+## WebXR tracking and App Clips
+
+`/ar.html` chooses its tracker when it loads. If the browser offers WebXR `immersive-ar`, the page runs a WebXR session and the host's native tracking drives the camera: ARCore in Chrome on Android, or ARKit inside an iOS App Clip that adds WebXR, such as Needle Go. Otherwise it loads 8th Wall as before; Safari on iPhone has no WebXR AR. `?tracking=webxr` or `?tracking=xr8` forces one, and `?debug=1` shows which one is running on the `tracker` line.
+
+On iPhone, open the page through Needle Go's App Clip: `https://appclip.needle.tools/ar?url=` followed by the URL-encoded page address. Needle's App Clip is already published, so it needs no Apple setup, and page changes deploy to Vercel as usual without an App Store review.
+
+Under WebXR the host draws the camera behind a transparent canvas, and `#ar-ui` is the session's DOM overlay, so the prompts, buttons and tuning dock stay usable. The floor is `local-floor`'s y = 0 when the host grants it. Otherwise it is the first surface hit straight below the session's starting point, or 1.45 m below that point until a surface is found. Memory preparation finishes before Start is enabled: while a session presents, three.js renders every frame with the XR camera, including the warm-up renders. 8th Wall's engine is not downloaded on this path, and its credit line is hidden.
+
+On the dev server, `/ar.html?xremu=1` installs the IWER WebXR emulator (a dev dependency) so the WebXR path runs in a desktop browser. The emulator raises its own view over the page while presenting, so script taps on `#ar-tap` to place the memory. Vite drops this code from production builds.

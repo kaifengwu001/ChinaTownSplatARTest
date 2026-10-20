@@ -23,6 +23,30 @@ body {
   display: block;
 }
 
+/* Receives taps on the AR view; controls are later in the DOM, so they sit above it. */
+#ar-tap {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+}
+
+/* A WebXR host draws the camera behind the page while its session runs. The
+   session sets the projection for the whole screen, so the canvas no longer
+   shrinks for the tuning dock. */
+html.xr-presenting,
+html.xr-presenting body {
+  background: transparent;
+}
+
+html.xr-presenting #camerafeed {
+  height: 100%;
+}
+
+/* 8th Wall's engine is never loaded on the WebXR path. */
+html.tracking-webxr #credit {
+  display: none;
+}
+
 #hud {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 8px);
