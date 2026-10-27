@@ -38,27 +38,31 @@ const SPILL_LIGHT_GLSL = /* glsl */ `
 /** Tangent of an angle in degrees: for the spill's half fan angle and penumbra. */
 const tangent = (degrees) => Math.tan(THREE.MathUtils.degToRad(degrees));
 
-/** Deform centers AND covariance with the same spatial mapping. */
-export function attachMemoryModifier(mesh, anchor, config, dimensions, settings) {
-  const photoSize = new THREE.Vector2(dimensions.photoWidth, dimensions.photoHeight);
-  const portalSize = new THREE.Vector2(dimensions.portalWidth, dimensions.portalHeight);
+/**
+ * Deform centers AND covariance with the same spatial mapping. `frame` is the
+ * node at the photographer's spot whose coordinates `layout` uses (see
+ * photographerLayout); the shader calls it the anchor.
+ */
+export function attachMemoryModifier(mesh, frame, layout, settings) {
+  const photoSize = new THREE.Vector2(layout.photoWidth, layout.photoHeight);
+  const portalSize = new THREE.Vector2(layout.portalWidth, layout.portalHeight);
   const u = {
     color: dyno.dynoFloat(-0.15), motion: dyno.dynoFloat(0), seconds: dyno.dynoFloat(0),
     meshFromAnchor: dyno.dynoMat4(new THREE.Matrix4()),
     anchorFromMesh: dyno.dynoMat4(new THREE.Matrix4()),
     eye: dyno.dynoVec3(new THREE.Vector3()),
-    sheetRadius: dyno.dynoFloat(settings.photoDistance),
-    photoSize: dyno.dynoVec2(photoSize.clone()), photoDistance: dyno.dynoFloat(settings.photoDistance),
-    portalDistance: dyno.dynoFloat(settings.portalDistance), photoElevation: dyno.dynoFloat(settings.photoElevation),
+    sheetRadius: dyno.dynoFloat(layout.photoDistance),
+    photoSize: dyno.dynoVec2(photoSize.clone()), photoDistance: dyno.dynoFloat(layout.photoDistance),
+    portalDistance: dyno.dynoFloat(layout.portalDistance),
     portalSize: dyno.dynoVec2(portalSize.clone()), streetStart: dyno.dynoFloat(STREET_START_MIN),
     spill: dyno.dynoFloat(settings.spillStrength), stretch: dyno.dynoFloat(settings.depthStretch),
     spillSpread: dyno.dynoFloat(tangent(settings.spillAngle/2)), spillBlur: dyno.dynoFloat(tangent(settings.spillSoftness)),
-    aperture: dyno.dynoVec4(new THREE.Vector4(0, settings.photoDistance, dimensions.photoWidth, dimensions.photoHeight)),
+    aperture: dyno.dynoVec4(new THREE.Vector4(0, layout.photoDistance, layout.photoWidth, layout.photoHeight)),
     parallax: dyno.dynoFloat(settings.parallaxGain),
     ...Object.fromEntries(["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"].map(key => [key,dyno.dynoFloat(settings[key])])),
   };
   const modifier = dyno.dyno({
-    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", stretch: "float", parallax: "float", photoSize: "vec2", photoDistance: "float", portalDistance: "float", photoElevation: "float",
+    inTypes: { covsplat: dyno.CovSplat, color: "float", motion: "float", seconds: "float", meshFromAnchor: "mat4", anchorFromMesh: "mat4", eye: "vec3", sheetRadius: "float", stretch: "float", parallax: "float", photoSize: "vec2", photoDistance: "float", portalDistance: "float",
       portalSize: "vec2", streetStart: "float", spill: "float", spillSpread: "float", spillBlur: "float", aperture: "vec4",
       rippleDiameter: "float", transitionWidth: "float", flowStrength: "float", flowSpeed: "float", rippleTurbulence: "float" },
     outTypes: { covsplat: dyno.CovSplat }, inputs: u,
@@ -104,8 +108,10 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
           ? spillLight(target.x, spillDistance, ${i.portalSize}, ${i.spill}, ${i.spillSpread}, ${i.spillBlur}) : 1.0;
         // When the street starts in front of the portal, its cut-off edge fades
         // over most of the spilled strip, so the spill trails off rather than
-        // ending in a rim.
-        float fadeLength = max(0.6, 0.8*(${i.portalDistance}-${i.streetStart}));
+        // ending in a rim. The fade ends at the portal plane, which keeps the
+        // bottom of the photographer's frame whole.
+        float spillLength = ${i.portalDistance}-${i.streetStart};
+        float fadeLength = spillLength > 0.0 ? min(max(0.6, 0.8*spillLength), spillLength) : 0.6;
         float street = smoother((-base.z-${i.streetStart})/fadeLength);
         // The street start stays ahead of the placement point, so every visible
         // splat has a viewing ray from it. Hidden ones nearer than that travel
@@ -137,9 +143,11 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
           // Spark sorts by camera distance, so the wrong splats cover each other.
           // Place each flat splat along the viewing ray through its sheet pixel,
           // on a shallow camera-centered shell ordered by ORIGINAL distance.
-          // Its screen position and footprint still match the anchored flat photo.
-          // The original plane is at placement-time phone height (local y=0).
-          vec3 sheetPoint = vec3(surfaceXY+vec2(0.0,${i.photoElevation}),-${i.photoDistance}-0.006);
+          // Its screen position and footprint still match the anchored flat photo,
+          // which is centred on the photographer's view axis. The ray passes
+          // through the pixel ON the photograph: a point behind it at the same
+          // offset would sit on a slightly narrower ray and shrink the image.
+          vec3 sheetPoint = vec3(surfaceXY,-${i.photoDistance});
           vec3 sheetDelta = sheetPoint-${i.eye};
           float sheetLength = max(length(sheetDelta),0.001);
           vec3 sheetDirection = sheetDelta/sheetLength;
@@ -238,26 +246,26 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
   const aperture = new THREE.Vector4();
   let previousPhase;
   /** `opening` is the current aperture: { centerY, distance, width, height }. */
-  return (frame, camera, opening) => {
-    anchor.updateWorldMatrix(true,true);
-    relative.copy(anchor.matrixWorld).invert().multiply(mesh.matrixWorld);
+  return (memoryFrame, camera, opening) => {
+    frame.updateWorldMatrix(true,true);
+    relative.copy(frame.matrixWorld).invert().multiply(mesh.matrixWorld);
     const transformChanged = !u.anchorFromMesh.value.equals(relative);
     u.anchorFromMesh.value.copy(relative);
     u.meshFromAnchor.value.copy(relative).invert();
     if (camera) {
       camera.updateWorldMatrix(true,false);
       eye.setFromMatrixPosition(camera.matrixWorld);
-      anchor.worldToLocal(eye);
+      frame.worldToLocal(eye);
     }
-    photoSize.set(dimensions.photoWidth, dimensions.photoHeight);
-    portalSize.set(dimensions.portalWidth, dimensions.portalHeight);
-    const streetStart = Math.max(settings.portalDistance+settings.sceneDistance, STREET_START_MIN);
+    photoSize.set(layout.photoWidth, layout.photoHeight);
+    portalSize.set(layout.portalWidth, layout.portalHeight);
+    const streetStart = Math.max(layout.streetStart, STREET_START_MIN);
     aperture.set(opening.centerY, opening.distance, opening.width, opening.height);
     const spillSpread = tangent(settings.spillAngle/2), spillBlur = tangent(settings.spillSoftness);
     const changed = transformChanged || !u.eye.value.equals(eye)
       || u.stretch.value !== settings.depthStretch || u.parallax.value !== settings.parallaxGain
-      || !u.photoSize.value.equals(photoSize) || u.photoDistance.value !== settings.photoDistance
-      || u.portalDistance.value !== settings.portalDistance || u.photoElevation.value !== settings.photoElevation
+      || !u.photoSize.value.equals(photoSize) || u.photoDistance.value !== layout.photoDistance
+      || u.portalDistance.value !== layout.portalDistance
       || !u.portalSize.value.equals(portalSize) || u.streetStart.value !== streetStart
       || u.spill.value !== settings.spillStrength || u.spillSpread.value !== spillSpread
       || u.spillBlur.value !== spillBlur || !u.aperture.value.equals(aperture);
@@ -268,15 +276,15 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     u.aperture.value.copy(aperture);
     u.streetStart.value = streetStart;
     u.spill.value = settings.spillStrength;
-    for (const key of ["photoDistance","portalDistance","photoElevation"]) u[key].value = settings[key];
+    for (const key of ["photoDistance","portalDistance"]) u[key].value = layout[key];
     u.eye.value.copy(eye);
     // Start the shell behind the furthest photo corner, keeping it behind the
     // portal matte. Radius differences then encode depth, not pixel location.
-    if (frame.growth < 1) {
+    if (memoryFrame.growth < 1) {
       let sheetRadius = 0;
-      for (const x of [-dimensions.photoWidth/2,dimensions.photoWidth/2]) {
-        for (const y of [-dimensions.photoHeight/2,dimensions.photoHeight/2]) {
-          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,settings.photoElevation+y-eye.y,-settings.photoDistance-0.006-eye.z));
+      for (const x of [-layout.photoWidth/2,layout.photoWidth/2]) {
+        for (const y of [-layout.photoHeight/2,layout.photoHeight/2]) {
+          sheetRadius = Math.max(sheetRadius,Math.hypot(x-eye.x,y-eye.y,-layout.photoDistance-0.006-eye.z));
         }
       }
       u.sheetRadius.value = sheetRadius+0.006;
@@ -284,10 +292,10 @@ export function attachMemoryModifier(mesh, anchor, config, dimensions, settings)
     u.stretch.value = settings.depthStretch;
     u.parallax.value = settings.parallaxGain;
     for (const key of ["rippleDiameter","transitionWidth","flowStrength","flowSpeed","rippleTurbulence"]) u[key].value=settings[key];
-    u.color.value = frame.color;
-    u.motion.value = frame.growth;
-    u.seconds.value = frame.seconds;
-    if ((frame.phase !== "active" && frame.phase !== "dormant") || previousPhase !== frame.phase || changed) mesh.updateVersion();
-    previousPhase = frame.phase;
+    u.color.value = memoryFrame.color;
+    u.motion.value = memoryFrame.growth;
+    u.seconds.value = memoryFrame.seconds;
+    if ((memoryFrame.phase !== "active" && memoryFrame.phase !== "dormant") || previousPhase !== memoryFrame.phase || changed) mesh.updateVersion();
+    previousPhase = memoryFrame.phase;
   };
 }

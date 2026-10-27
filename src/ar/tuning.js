@@ -1,11 +1,7 @@
-import { DEFAULTS } from "../config.js";
 import { MEMORY_SETTINGS, MEMORY_TUNING_PARAMETERS } from "../memory-settings.js";
 import { createAddressSync } from "../address-sync.js";
 
-const format = ({ unit }, value) => unit === "photoWidth" ? `${(value*DEFAULTS.windowWidth).toFixed(2)} m`
-  : unit === "portalWidth" ? `${(value*DEFAULTS.windowWidth).toFixed(2)} m`
-  : unit === "portalHeight" ? `${(value*DEFAULTS.windowHeight).toFixed(2)} m`
-  : unit === "m" || unit === "s" ? `${value.toFixed(2)} ${unit}`
+const format = ({ unit }, value) => unit === "m" || unit === "s" ? `${value.toFixed(2)} ${unit}`
   : unit === "deg" ? `${value.toFixed(1)}°`
   : unit === "count" ? value.toLocaleString("en-US")
   : unit === "px" ? `${value.toFixed(1)} px`
@@ -29,6 +25,9 @@ export function createArTuning(memory, anchor) {
   const groups = [...new Set(MEMORY_TUNING_PARAMETERS.map(p => p.group))];
   let group = groups[0];
   let loopStart = null;
+  // What scene size and the match settings imply; nothing here is tuned directly.
+  const derived = document.createElement("p");
+  derived.className = "ar-tune-derived";
 
   const dockSize = () => {
     const height = panel.hidden ? 0 : Math.ceil(document.documentElement.clientHeight-panel.getBoundingClientRect().top);
@@ -62,6 +61,11 @@ export function createArTuning(memory, anchor) {
       row.input.value = values[parameter.key];
       row.output.textContent = format(parameter,values[parameter.key]);
     }
+    const { eyeHeight, photoWidth, photoHeight, portalWidth, portalHeight, portalDistance, sceneDistance } = memory.layout;
+    const m = value => value.toFixed(2);
+    derived.textContent = `Eye ${m(eyeHeight)} m up · photo ${m(photoWidth)} × ${m(photoHeight)} m · `
+      + `portal ${m(portalWidth)} × ${m(portalHeight)} m, ${m(portalDistance)} m past the spot · `
+      + `street starts ${m(Math.abs(sceneDistance))} m ${sceneDistance < 0 ? "in front of" : "behind"} it`;
   }
   function saveLink() {
     const url = address.current();
@@ -75,6 +79,7 @@ export function createArTuning(memory, anchor) {
   }
   function showGroup() {
     for (const parameter of MEMORY_TUNING_PARAMETERS) inputs.get(parameter.key).row.hidden = parameter.group !== group;
+    derived.hidden = group !== "Match" && group !== "Scene";
     for (const button of tabs.children) button.setAttribute("aria-selected",String(button.textContent === group));
     sliders.setAttribute("aria-label",`${group} tuning`);
     sliders.scrollTop = 0;
@@ -103,6 +108,7 @@ export function createArTuning(memory, anchor) {
       memory.setTuning(next); refreshValues(); saveLink();
     });
   }
+  sliders.append(derived);
   const stopLoop = () => { loopStart = null; document.getElementById("ar-tune-loop").setAttribute("aria-pressed","false"); };
   timeline.addEventListener("input",() => { stopLoop(); memory.seek(Number(timeline.value)); });
   document.getElementById("ar-tune-original").addEventListener("click",() => { stopLoop(); memory.reset(); });

@@ -9,13 +9,14 @@
   <body>
     <canvas id="view" aria-label="Interactive preview of a historical photograph becoming a 3D window"></canvas>
     <header><span class="eyebrow">PARALLAX WINDOW / WEBAR</span><h1>A memory, opening.</h1><p id="preview-instructions">Loading the memory…</p></header>
-    <button id="activate-memory" class="memory-prompt" type="button" hidden>tap to activate memory</button>
+    <p id="match-hint" class="memory-prompt match-hint" role="status" hidden></p>
     <section id="preview-controls" aria-label="Animation preview controls" hidden>
       <div class="control-heading"><span id="stage" role="status">Loading the memory…</span><button id="replay" type="button" disabled>Replay</button></div>
       <label class="timeline-label" for="timeline">Activation <output id="time">0.0s</output></label>
       <input id="timeline" type="range" min="0" max="6.15" value="0" step="0.01" disabled />
       <div class="stages"><span>Original</span><span>Color</span><span>Depth</span></div>
       <div id="scene-controls">
+      <label class="view-label" for="walk">Walk forward <output id="walk-value">0.00 m</output><input id="walk" type="range" min="0" max="1.5" value="0" step="0.01" disabled /></label>
       <label class="view-label" for="viewpoint">Glance sideways <input id="viewpoint" type="range" min="-0.35" max="0.35" value="0" step="0.01" disabled /></label>
       <label class="view-label" for="depth-stretch">Depth stretch <output id="depth-value">1.0×</output><input id="depth-stretch" type="range" min="0.5" max="4" value="1" step="0.1" disabled /></label>
       <label class="view-label" for="parallax-gain">Parallax strength <output id="parallax-value">1.0×</output><input id="parallax-gain" type="range" min="1" max="4" value="1" step="0.1" disabled /></label>

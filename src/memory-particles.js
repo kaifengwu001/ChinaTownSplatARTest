@@ -80,8 +80,8 @@ export function createMemoryParticles(photoWidth, photoHeight, distance, colorTe
   points.renderOrder = 2;
   return { points,
     update(frame,dpr,centerY,dimensions) { points.visible=frame.phase==="colorizing"; material.uniforms.progress.value=frame.color;
-      if (dimensions) material.uniforms.photoSize.value.set(dimensions.photoWidth,dimensions.photoHeight);
-      material.uniforms.distance.value=settings.photoDistance;
+      material.uniforms.photoSize.value.set(dimensions.photoWidth,dimensions.photoHeight);
+      material.uniforms.distance.value=dimensions.photoDistance;
       geometry.setDrawRange(0,settings.particleCount);
       material.uniforms.sizeMin.value=settings.particleSizeMin;
       material.uniforms.sizeMax.value=settings.particleSizeMax;

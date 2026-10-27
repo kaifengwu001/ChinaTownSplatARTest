@@ -81,7 +81,7 @@ async function main() {
   const canvas = document.getElementById("camerafeed");
   const startButton = document.getElementById("start");
   const resetButton = document.getElementById("reset");
-  const activateButton = document.getElementById("activate-memory");
+  const matchHint = document.getElementById("match-hint");
   const tapTarget = document.getElementById("ar-tap") ?? canvas;
   const hud = createHud(document.getElementById("hud"), document.getElementById("prompt"), {
     debug: params.get("debug") === "1",
@@ -116,7 +116,7 @@ async function main() {
   const anchor = createAnchor(matte, splat.root);
   hud.prompt("Loading original photograph…");
   const memory = await createMemoryWindow({
-    anchor, splat, matte, config, button: activateButton, settings: readMemorySettings(window.location.search),
+    anchor, splat, matte, config, hint: matchHint, settings: readMemorySettings(window.location.search),
     onPhase: (phase) => hud.set({ memory: phase }),
   });
   const tuning = createArTuning(memory,anchor);
@@ -174,6 +174,8 @@ async function main() {
     },
     onTracking: (next) => {
       tracking = next;
+      // A jumping pose could fake the match, so it waits for steady tracking.
+      memory.setMatching(next.status === "NORMAL");
       hud.set({ tracking: `${next.status}${next.reason ? ` (${next.reason})` : ""}` });
       if (started && !anchor.visible && !preparationFailed) hud.prompt(memory.ready ? trackingPrompt(next, false) : "Preparing memory effects…");
     },
@@ -234,10 +236,10 @@ async function main() {
   startButton.disabled = trackingKind === "webxr";
 
   resetButton.addEventListener("click", reset);
-  activateButton.addEventListener("click", () => memory.activate());
-  const onTap = (event) => {
+  // A tap only places the memory. Activation waits for the viewer to stand
+  // where the photographer stood, phone sideways (see memory-window.js).
+  const onTap = () => {
     if (!anchor.visible) place();
-    else if (camera && memory.hit(event, camera, canvas)) memory.activate();
   };
   // The tap layer covers the canvas, but a WebXR host may raise the canvas
   // above the page while it presents; a tap reaches only one of them.

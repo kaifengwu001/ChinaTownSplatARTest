@@ -13,8 +13,11 @@ import { createArTuning } from "./ar/tuning.js";
 
 const STAGES = { dormant: "A photograph, waiting", colorizing: "Color ripples across the surface", surface: "The reconstructed photograph", expanding: "The street opens into depth", active: "A window into the memory" };
 const ASSETS = SPLAT_ASSETS;
-// The review eye stands 1.5 m above the floor, like a phone held at placement.
+// The memory is placed by a phone 1.5 m above the floor.
 const FLOOR_Y = -1.5;
+// The review eye is a phone held sideways, which shows about 64° across its
+// long side.
+const PHONE_FOV = 64;
 
 async function main() {
   const params = new URLSearchParams(window.location.search);
@@ -30,6 +33,7 @@ async function main() {
   const timeline = document.getElementById("timeline");
   const time = document.getElementById("time");
   const viewpoint = document.getElementById("viewpoint");
+  const walk = document.getElementById("walk");
   const replay = document.getElementById("replay");
   const settings = readMemorySettings(window.location.search);
   const depthStretch = document.getElementById("depth-stretch");
@@ -52,7 +56,7 @@ async function main() {
   scene.add(anchor);
   const memory = await createMemoryWindow({
     anchor, splat, matte, config: DEFAULTS, settings,
-    button: document.getElementById("activate-memory"),
+    hint: document.getElementById("match-hint"),
     onPhase: (phase) => { document.getElementById("stage").textContent = STAGES[phase]; },
   });
   anchor.visible = true;
@@ -65,7 +69,13 @@ async function main() {
   await memory.prepare({ renderer, spark, scene, camera,
     beforeSample: (cam,seconds) => updateEffects(memory.effectsCamera(cam),seconds,memory.frame.effects),
   });
-  document.getElementById("preview-instructions").textContent = "Tap the photograph to bring the street back to life.";
+  document.getElementById("preview-instructions").textContent = showControls
+    ? "Walk forward to the photographer's spot, or tap the photograph."
+    : "Tap the photograph to bring the street back to life.";
+  // Metres walked from where the memory was placed. Frames are reviewed from
+  // the photographer's spot, the walk's end.
+  walk.max = settings.walkDistance+0.5;
+  walk.value = params.has("walk") ? Number(params.get("walk")) : params.has("t") ? settings.walkDistance : 0;
   const flowControls = showControls ? createMemoryFlowControls(memory,settings,() => { frozenFxTime = null; }) : null;
   const arTuning = params.get("arControls") === "1" ? createArTuning(memory,anchor) : null;
   const floor = new THREE.GridHelper(10,40,0x405553,0x283b39);
@@ -74,7 +84,7 @@ async function main() {
   floor.material.depthWrite = false;
   scene.add(floor);
   timeline.max = memory.duration;
-  for (const control of [timeline, viewpoint, replay, depthStretch, parallaxGain, flatEffects]) control.disabled = false;
+  for (const control of [timeline, viewpoint, walk, replay, depthStretch, parallaxGain, flatEffects]) control.disabled = false;
   depthStretch.addEventListener("input", () => memory.setDepthStretch(Number(depthStretch.value)));
   parallaxGain.addEventListener("input", () => memory.setParallaxGain(Number(parallaxGain.value)));
   flatEffects.addEventListener("input", () => memory.setFlatEffectStrength(Number(flatEffects.value)));
@@ -83,7 +93,6 @@ async function main() {
     viewpoint.value = "0";
   });
   timeline.addEventListener("input", () => memory.seek(Number(timeline.value)));
-  document.getElementById("activate-memory").addEventListener("click", () => memory.activate());
   canvas.addEventListener("click", (event) => {
     if (memory.hit(event, camera, canvas)) memory.activate();
   });
@@ -108,36 +117,22 @@ async function main() {
     memory.seek(seconds);
   }
   renderer.setAnimationLoop(() => {
-    camera.position.x = Number(viewpoint.value);
+    // A phone at the photographer's eye height, level and facing the
+    // photograph, walked forward from the placement and glancing sideways.
+    const { walkDistance } = memory.getSettings();
+    walk.max = walkDistance+0.5;
+    camera.position.set(Number(viewpoint.value), FLOOR_Y+memory.layout.eyeHeight, -Number(walk.value));
+    const tangent = Math.tan(THREE.MathUtils.degToRad(PHONE_FOV/2));
+    const fov = THREE.MathUtils.radToDeg(2*Math.atan(camera.aspect >= 1 ? tangent/camera.aspect : tangent));
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     const now = performance.now() / 1000;
     flowControls?.update(now);
     arTuning?.update(now);
     const frame = memory.update(camera, canvas, now);
-    // Only the review camera widens its view as the larger portal opens.
-    // The phone AR camera always retains 8th Wall's calibrated projection.
-    // Geometry and camera framing use the same frame's progress.
-    const growth = frame.growth;
-    const { width: apertureWidth, height: apertureHeight, centerY, distance } = memory.aperture;
-    // Frame the aperture and the floor in front of it, where the street spills,
-    // measured as heights on the aperture's plane. The floor comes into view
-    // as the street spills onto it, from early in the expansion.
-    const settle = THREE.MathUtils.smoothstep(growth,0.2,1);
-    const spill = settle*Math.min(Math.max(-memory.getSettings().sceneDistance,0),distance-0.3);
-    const top = centerY+apertureHeight/2+0.1;
-    const apertureBottom = centerY-apertureHeight/2;
-    const bottom = THREE.MathUtils.lerp(apertureBottom,Math.min(apertureBottom,FLOOR_Y*distance/(distance-spill)),settle)-0.1;
-    // Never wider than 100 degrees, which would distort the review. When both
-    // do not fit, keep the top of the aperture in view and crop the near floor.
-    const halfView = Math.min(Math.max(THREE.MathUtils.lerp(0.36,0.68,growth),(top-bottom)/2,
-      THREE.MathUtils.lerp(0.28,0.42,growth)/camera.aspect,(apertureWidth/2+0.08)/camera.aspect),distance*Math.tan(THREE.MathUtils.degToRad(50)));
-    camera.lookAt(0, Math.max((top+bottom)/2, top-halfView), -distance);
-    const nextFov = THREE.MathUtils.radToDeg(2*Math.atan(halfView/distance));
-    if (camera.fov!==nextFov) { camera.fov=nextFov; camera.updateProjectionMatrix(); }
-    camera.updateWorldMatrix(true, false);
-    memory.updatePrompt(camera, canvas);
     if (frame.phase !== "dormant") updateEffects(memory.effectsCamera(camera), frozenFxTime ?? now, frame.effects);
     timeline.value = Math.min(frame.seconds, memory.duration);
     time.textContent = `${Math.min(frame.seconds, memory.duration).toFixed(1)}s`;
+    document.getElementById("walk-value").textContent = `${Number(walk.value).toFixed(2)} m`;
     document.getElementById("depth-value").textContent = `${Number(depthStretch.value).toFixed(1)}×`;
     document.getElementById("parallax-value").textContent = `${Number(parallaxGain.value).toFixed(1)}×`;
     document.getElementById("flat-effects-value").textContent = `${Math.round(Number(flatEffects.value)*100)}%`;

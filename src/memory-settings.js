@@ -18,6 +18,11 @@ export const MEMORY_SETTINGS = Object.freeze({
   captureAspect: 1448 / 1086,
   // SHARP assumed a 30mm lens on a 36x24mm sensor, using the image diagonal.
   captureFocalRatio: 30 * Math.hypot(1448, 1086) / Math.hypot(36, 24) / 1448,
+  // Where the restored colour photograph's frame lies in the original, as
+  // fractions of the original's width and height from its top-left corner:
+  // left, top, right, bottom. The restoration cropped the original's top and
+  // bottom and stretched it to 4:3. From scripts/register_original.py.
+  originalFrame: Object.freeze([0.0043, 0.0574, 0.9981, 0.9644]),
   // The capture's street, from scripts/fit_ground.py in SHARP's OpenCV frame:
   // the ground's up direction, the camera's height above it, and how far ahead
   // the reconstructed street begins. The photographer's camera was level.
@@ -28,19 +33,21 @@ export const MEMORY_SETTINGS = Object.freeze({
   colorDuration: 2.7,
   flatHoldDuration: 0.35,
   depthDuration: 3.1,
-  photoScale: 0.5,
-  photoDistance: 0.4,
-  photoElevation: 0,
-  // Tuned on a phone: a 1.6 x 4 m portal standing on the estimated floor
-  // 3.44 m ahead of the placement-time phone.
-  portalWidthScale: 4,
-  portalHeightScale: 10,
-  portalDistance: 3.44,
-  // The street, with its ground on the floor, at 0.85 of its captured size.
+  // The match cut. The photographer stood `walkDistance` ahead of where the
+  // memory is placed; the photograph floats `photoDistance` beyond that spot,
+  // filling the capture's frame as seen from it. Holding the phone sideways
+  // within `matchTolerance` (degrees of the frame's misalignment) for
+  // `matchHold` seconds starts the activation. The photograph, the portal and
+  // where the street begins all follow from these and the scene's size; see
+  // src/photographer.js.
+  walkDistance: 1,
+  photoDistance: 0.8,
+  matchTolerance: 4,
+  matchHold: 0.6,
+  // The street at 0.85 of its captured size, tuned on a phone. The
+  // photographer's eye, and so the phone at the match, is 1.70 m x 0.85 above
+  // the floor.
   sceneScale: 0.85,
-  // From the portal plane to where the street begins. Below zero, the street's
-  // ground spills through the portal onto the floor in front of it.
-  sceneDistance: -2.03,
   // The spill is a fan of light from the portal's sides: its full angle, and
   // the penumbra angle by which its edges blur wider with distance.
   spillStrength: 6.3,
@@ -53,14 +60,11 @@ export const MEMORY_SETTINGS = Object.freeze({
 });
 
 export const MEMORY_TUNING_PARAMETERS = Object.freeze([
-  { key: "photoScale", label: "Image width", min: 0.125, max: 3, step: 0.025, unit: "photoWidth", group: "Layout" },
-  { key: "photoDistance", label: "Image distance", min: 0.15, max: 2, step: 0.01, unit: "m", group: "Layout" },
-  { key: "photoElevation", label: "Image height offset", min: -1, max: 1, step: 0.01, unit: "m", group: "Layout" },
-  { key: "portalWidthScale", label: "Portal width", min: 0.5, max: 6, step: 0.05, unit: "portalWidth", group: "Layout" },
-  { key: "portalHeightScale", label: "Portal height", min: 0.5, max: 15, step: 0.05, unit: "portalHeight", group: "Layout" },
-  { key: "portalDistance", label: "Portal distance", min: 0.3, max: 5, step: 0.01, unit: "m", group: "Layout" },
+  { key: "walkDistance", label: "Walk distance", min: 0, max: 4, step: 0.05, unit: "m", group: "Match" },
+  { key: "photoDistance", label: "Image distance", min: 0.2, max: 3, step: 0.01, unit: "m", group: "Match" },
+  { key: "matchTolerance", label: "Match tolerance", min: 0.5, max: 15, step: 0.5, unit: "deg", group: "Match" },
+  { key: "matchHold", label: "Match hold", min: 0, max: 3, step: 0.05, unit: "s", group: "Match" },
   { key: "sceneScale", label: "Scene size", min: 0.2, max: 3, step: 0.01, unit: "gain", group: "Scene" },
-  { key: "sceneDistance", label: "Scene distance", min: -3, max: 12, step: 0.01, unit: "m", group: "Scene" },
   { key: "spillStrength", label: "Ground spill", min: 0, max: 8, step: 0.05, unit: "gain", group: "Scene" },
   { key: "spillAngle", label: "Spill angle", min: 20, max: 170, step: 1, unit: "deg", group: "Scene" },
   { key: "spillSoftness", label: "Spill edge blur", min: 0, max: 80, step: 1, unit: "deg", group: "Scene" },
@@ -98,11 +102,4 @@ export function readMemorySettings(search) {
   }
   validateMemorySettings(settings);
   return settings;
-}
-
-export function memoryDimensions(config, aspect, settings = MEMORY_SETTINGS) {
-  const photoWidth = config.windowWidth * settings.photoScale;
-  return { photoWidth, photoHeight: photoWidth / aspect,
-    portalWidth: config.windowWidth * settings.portalWidthScale,
-    portalHeight: config.windowHeight * settings.portalHeightScale };
 }
