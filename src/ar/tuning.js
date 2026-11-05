@@ -61,11 +61,16 @@ export function createArTuning(memory, anchor) {
       row.input.value = values[parameter.key];
       row.output.textContent = format(parameter,values[parameter.key]);
     }
-    const { eyeHeight, photoWidth, photoHeight, portalWidth, portalHeight, portalDistance, sceneDistance } = memory.layout;
+  }
+  // Placement measures the phone's screen, which resizes the photograph, so
+  // the readout follows the layout rather than the sliders alone.
+  function describe() {
+    const { eyeHeight, photoWidth, photoHeight, photoScale, portalScale, portalWidth, portalHeight, portalDistance, captureOffset, sceneDistance } = memory.layout;
     const m = value => value.toFixed(2);
-    derived.textContent = `Eye ${m(eyeHeight)} m up · photo ${m(photoWidth)} × ${m(photoHeight)} m · `
+    return `Eye ${m(eyeHeight)} m up · photo ${m(photoWidth)} × ${m(photoHeight)} m, opens ×${m(portalScale/photoScale)} · `
       + `portal ${m(portalWidth)} × ${m(portalHeight)} m, ${m(portalDistance)} m past the spot · `
-      + `street starts ${m(Math.abs(sceneDistance))} m ${sceneDistance < 0 ? "in front of" : "behind"} it`;
+      + `photographer ${m(captureOffset)} m behind the spot · `
+      + `street starts ${m(Math.abs(sceneDistance))} m ${sceneDistance < 0 ? "in front of" : "behind"} the portal`;
   }
   function saveLink() {
     const url = address.current();
@@ -130,6 +135,8 @@ export function createArTuning(memory, anchor) {
   });
   refreshValues(); showGroup(); toggle.disabled = false;
   const paint = () => {
+    const text = describe();
+    if (derived.textContent !== text) derived.textContent = text;
     const enabled = memory.ready && anchor.visible;
     actions.disabled = !enabled; timeline.disabled = !enabled;
     timeline.max = memory.duration;

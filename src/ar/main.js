@@ -9,6 +9,7 @@ import { createAnchor, anchorPoseFromCamera } from "./placement.js";
 import { createHud, trackingPrompt } from "./hud.js";
 import { createMemoryWindow } from "../memory-window.js";
 import { readMemorySettings } from "../memory-settings.js";
+import { screenTangents } from "../photographer.js";
 import { SPLAT_ASSETS as ASSETS } from "../scene-assets.js";
 import { createArTuning } from "./tuning.js";
 
@@ -134,6 +135,9 @@ async function main() {
     const pose = anchorPoseFromCamera(camera);
     anchor.position.copy(pose.position);
     anchor.quaternion.copy(pose.quaternion);
+    // The matched photograph's size follows this phone's field of view, fixed
+    // from here so it holds still as the viewer walks up to it.
+    memory.setScreen(screenTangents(camera.projectionMatrix.elements));
     // The tracker reports the floor in world coordinates (XR8's absolute-scale
     // ground is y=0). Convert it into this camera-height anchor's coordinates;
     // no surface hit is needed at placement.

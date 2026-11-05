@@ -33,15 +33,21 @@ export const MEMORY_SETTINGS = Object.freeze({
   colorDuration: 2.7,
   flatHoldDuration: 0.35,
   depthDuration: 3.1,
-  // The match cut. The photographer stood `walkDistance` ahead of where the
-  // memory is placed; the photograph floats `photoDistance` beyond that spot,
-  // filling the capture's frame as seen from it. Holding the phone sideways
-  // within `matchTolerance` (degrees of the frame's misalignment) for
-  // `matchHold` seconds starts the activation. The photograph, the portal and
-  // where the street begins all follow from these and the scene's size; see
-  // src/photographer.js.
+  // The match cut. The viewer matches the photograph `walkDistance` ahead of
+  // where the memory is placed; it floats `photoDistance` beyond that spot and,
+  // seen from it, fits inside the sideways screen at `matchFrame` of its
+  // height (tuned on a phone: the whole photograph in view). Holding the phone
+  // sideways and level, with the photograph's corners within `matchTolerance`
+  // degrees of the guide frame's on screen, for `matchHold` seconds starts the
+  // activation. `dolly` moves the spot in front of the photographer for a
+  // dolly zoom as the photograph opens: 0 matches the photographer's view
+  // exactly, 1 is the tap version's 1.8 m, 0.3 was settled on a phone. The
+  // photograph, the portal and where the street begins all follow from these
+  // and the scene's size; see src/photographer.js.
   walkDistance: 1,
   photoDistance: 0.8,
+  matchFrame: 0.8,
+  dolly: 0.3,
   matchTolerance: 4,
   matchHold: 0.6,
   // The street at 0.85 of its captured size, tuned on a phone. The
@@ -62,6 +68,8 @@ export const MEMORY_SETTINGS = Object.freeze({
 export const MEMORY_TUNING_PARAMETERS = Object.freeze([
   { key: "walkDistance", label: "Walk distance", min: 0, max: 4, step: 0.05, unit: "m", group: "Match" },
   { key: "photoDistance", label: "Image distance", min: 0.2, max: 3, step: 0.01, unit: "m", group: "Match" },
+  { key: "matchFrame", label: "Match frame", min: 0.3, max: 1, step: 0.01, unit: "percent", group: "Match" },
+  { key: "dolly", label: "Dolly zoom", min: 0, max: 1.5, step: 0.05, unit: "gain", group: "Match" },
   { key: "matchTolerance", label: "Match tolerance", min: 0.5, max: 15, step: 0.5, unit: "deg", group: "Match" },
   { key: "matchHold", label: "Match hold", min: 0, max: 3, step: 0.05, unit: "s", group: "Match" },
   { key: "sceneScale", label: "Scene size", min: 0.2, max: 3, step: 0.01, unit: "gain", group: "Scene" },

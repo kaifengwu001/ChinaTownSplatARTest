@@ -6,7 +6,7 @@ import { MEMORY_TUNING_PARAMETERS, readMemorySettings } from "../src/memory-sett
 import { createMemoryWindow } from "../src/memory-window.js";
 import { createMatte } from "../src/window-rig.js";
 import { createAnchor, anchorPoseFromCamera } from "../src/ar/placement.js";
-import { photographerLayout } from "../src/photographer.js";
+import { frameScale, photographerLayout } from "../src/photographer.js";
 
 const originalLoad = THREE.TextureLoader.prototype.loadAsync;
 const originalRaf = globalThis.requestAnimationFrame;
@@ -141,7 +141,7 @@ function phoneAt(f, offset, { roll = 0, yaw = 0, wide = true } = {}) {
   return { camera, canvas, spot };
 }
 
-test("the photograph waits at the photographer's spot as the viewer moves", async () => {
+test("the photograph waits at the spot as the viewer moves", async () => {
   for (const height of [1,1.6,2.1]) {
     const f = await fixture();
     await f.memory.prepare(f.context);
@@ -172,48 +172,80 @@ test("the photograph waits at the photographer's spot as the viewer moves", asyn
   }
 });
 
-test("from the photographer's spot each pixel of the photograph lies on the ray to the point it shows", async () => {
+test("from the spot each street point sits where its pixel was, scaled by the window's growth and the dolly", async () => {
+  for (const dolly of [0,.2,1]) {
+    const f = await fixture();
+    const { memory,splat } = f;
+    memory.setTuning({ sceneScale:.85, photoDistance:.8, dolly });
+    await memory.prepare(f.context);
+    const settings = memory.getSettings();
+    const { photoScale, captureOffset } = memory.layout;
+    const { spot } = phoneAt(f,new THREE.Vector3());
+    const photo = f.matte.parent.children.find(o => o.material?.uniforms?.photograph);
+    photo.updateWorldMatrix(true,false);
+    splat.mesh.updateWorldMatrix(true,false);
+    const base = photo.geometry.parameters;
+    const tangents = point => { const local = spot.worldToLocal(point.clone()); return [local.x/-local.z, local.y/-local.z]; };
+    for (const p of [[0,0,5],[-2,1.6,4],[3,-1.2,9],[-8,-6,30],[40,25,300]].map(xyz => new THREE.Vector3(...xyz))) {
+      // SHARP's pinhole, in the colour photograph's frame (OpenCV: y down).
+      const u = .5+p.x/p.z*settings.captureFocalRatio;
+      const v = .5-p.y/p.z*settings.captureFocalRatio*settings.captureAspect;
+      const pixel = tangents(photo.localToWorld(new THREE.Vector3((u-.5)*base.width,(v-.5)*base.height,0)));
+      const point = tangents(p.clone().applyMatrix4(splat.mesh.matrixWorld));
+      const depth = p.z*settings.sceneScale;
+      const growth = depth/(depth-captureOffset)/photoScale;
+      for (const axis of [0,1]) assert.ok(Math.abs(point[axis]-pixel[axis]*growth) < 1e-9*(1+Math.abs(point[axis])),`dolly ${dolly}: ${p.toArray()} axis ${axis}`);
+    }
+    memory.dispose();
+  }
+});
+
+test("with no dolly and the photographer's own frame, the street lies on the photograph's rays", async () => {
   const f = await fixture();
   const { memory,splat } = f;
-  memory.setTuning({ sceneScale:.85, photoDistance:.8 });
+  // A screen twice the photographer's frame, which the frame fills at half its height.
+  const { tanX, tanY } = memory.layout;
+  memory.setScreen({ tanLong:2*tanX, tanShort:2*tanY });
+  memory.setTuning({ dolly:0, matchFrame:.5 });
   await memory.prepare(f.context);
   const settings = memory.getSettings();
-  const { photoWidth, photoHeight } = memory.layout;
+  close(memory.layout.photoScale,1); close(memory.layout.portalScale,1); close(memory.layout.captureOffset,0);
   const { spot } = phoneAt(f,new THREE.Vector3());
   const eye = spot.getWorldPosition(new THREE.Vector3());
   const photo = f.matte.parent.children.find(o => o.material?.uniforms?.photograph);
   photo.updateWorldMatrix(true,false);
   splat.mesh.updateWorldMatrix(true,false);
   const base = photo.geometry.parameters;
-  for (const p of [[0,0,5],[-2,1.6,4],[3,-1.2,9],[-8,-6,30],[40,25,300]].map(xyz => new THREE.Vector3(...xyz))) {
-    // SHARP's pinhole, in the colour photograph's frame (OpenCV: y down).
+  for (const p of [[0,0,5],[-2,1.6,4],[40,25,300]].map(xyz => new THREE.Vector3(...xyz))) {
     const u = .5+p.x/p.z*settings.captureFocalRatio;
     const v = .5-p.y/p.z*settings.captureFocalRatio*settings.captureAspect;
     const pixel = photo.localToWorld(new THREE.Vector3((u-.5)*base.width,(v-.5)*base.height,0)).sub(eye).normalize();
     const point = p.clone().applyMatrix4(splat.mesh.matrixWorld).sub(eye).normalize();
     assert.ok(pixel.angleTo(point) < 1e-6,`ray to ${p.toArray()} is ${pixel.angleTo(point)} rad off`);
   }
-  close(photo.scale.x*base.width,photoWidth); close(photo.scale.y*base.height,photoHeight);
   memory.dispose();
 });
 
-test("from the spot the aperture keeps the photograph's frame all the way to the portal", async () => {
+test("from the spot the aperture grows evenly from the photograph's frame to the portal's", async () => {
   const f = await fixture();
   const { memory } = f;
   await memory.prepare(f.context);
-  const { tanX, tanY, photoDistance, portalDistance, eyeHeight, portalHeight, portalWidth } = memory.layout;
+  const { tanY, photoScale, portalScale, photoDistance, portalDistance, eyeHeight } = memory.layout;
+  assert.ok(photoScale < 1 && portalScale > 1);
   const { colorDuration, flatHoldDuration, depthDuration } = memory.getSettings();
   let previous = photoDistance;
   for (let step = 0; step <= 20; step++) {
-    memory.seek(colorDuration+flatHoldDuration+depthDuration*step/20);
+    const seconds = colorDuration+flatHoldDuration+depthDuration*step/20;
+    memory.seek(seconds);
     const { centerY, width, height, distance } = memory.aperture;
-    close(centerY,0); close(width/distance,2*tanX); close(height/distance,2*tanY);
+    const scale = height/distance/(2*tanY);
+    close(centerY,0); close(width/height,memory.getSettings().captureAspect);
+    close(scale,photoScale+(portalScale-photoScale)*memory.frame.growth);
     assert.ok(distance >= previous-1e-12, `aperture came forward at step ${step}`);
     previous = distance;
   }
   close(previous,portalDistance);
-  // The finished portal fills the frame and stands on the floor below the spot.
-  close(portalHeight,2*eyeHeight); close(portalWidth,2*tanX*portalDistance);
+  // The finished portal stands on the floor below the spot.
   close(f.matte.position.y-memory.aperture.height/2,-eyeHeight);
   memory.dispose();
 });
@@ -225,57 +257,73 @@ test("live match, scene and timing tuning re-derives the layout and reuses shade
   const photo = matte.parent.children.find(o => o.material?.uniforms?.photograph);
   const width = memory.layout.photoWidth;
   const generators = f.generators();
-  memory.setTuning({ walkDistance:1.5, photoDistance:.6, matchTolerance:6, matchHold:1,
+  memory.setTuning({ walkDistance:1.5, photoDistance:.6, matchFrame:.6, dolly:.5, matchTolerance:6, matchHold:1,
     sceneScale:1.1, spillStrength:2.5,
     colorDuration:3, flatHoldDuration:.5, depthDuration:4, depthStretch:3, parallaxGain:2 });
+  const screen = { tanLong:.7, tanShort:.35 };
+  memory.setScreen(screen);
   memory.reset();
   const settings = memory.getSettings();
-  assert.deepEqual({ ...memory.layout },{ ...photographerLayout(settings) });
-  const { eyeHeight, portalDistance, tanX, tanY } = memory.layout;
+  assert.deepEqual({ ...memory.layout },{ ...photographerLayout(settings,screen) });
+  const { eyeHeight, portalDistance, tanX, tanY, photoScale, portalScale, captureOffset } = memory.layout;
   close(eyeHeight,settings.captureCameraHeight*1.1);
   close(photo.position.z,-.6); close(photo.position.y,0);
-  close(photo.scale.x,memory.layout.photoWidth/width); close(memory.layout.photoWidth,1.2*tanX);
+  close(photo.scale.x,memory.layout.photoWidth/width); close(memory.layout.photoWidth,1.2*photoScale*tanX);
+  close(photoScale,frameScale(.6,screen,tanX,tanY));
   close(matte.parent.parent.position.z,-1.5); close(matte.parent.parent.position.y,-1.6+eyeHeight);
-  close(splat.pivot.scale.x,1.1);
+  close(splat.pivot.scale.x,1.1); close(splat.root.position.z,captureOffset);
+  assert.ok(captureOffset > 0);
   close(memory.duration,7.5);
   memory.seek(memory.duration);
   close(matte.position.z,-portalDistance);
-  close(memory.aperture.height,2*tanY*portalDistance);
+  close(memory.aperture.height,2*portalScale*tanY*portalDistance);
   assert.equal(f.generators(),generators,"Uniform tuning must not rebuild shader generators");
   const query = new URLSearchParams(Object.fromEntries(MEMORY_TUNING_PARAMETERS.map(({key}) => [key,memory.getSettings()[key]])));
   const parsed = readMemorySettings(query);
   close(parsed.walkDistance,1.5); close(parsed.photoDistance,.6); close(parsed.sceneScale,1.1); close(parsed.matchTolerance,6);
+  close(parsed.matchFrame,.6); close(parsed.dolly,.5);
+  assert.throws(() => memory.setScreen({ tanLong:0, tanShort:.3 }),/positive/);
   assert.throws(() => memory.setTuning({ portalDistance:2 }),/Unknown tuning parameter/);
   assert.throws(() => memory.setTuning({ photoDistance:0 }));
   assert.throws(() => memory.setTuning({ particleSizeMin:9, particleSizeMax:2 }));
   memory.dispose();
 });
 
-test("the street stands where it was shot: its camera at the spot, its ground on the floor", async () => {
-  for (const [height,scale,walk] of [[1.6,.85,1],[1.2,1,0],[2,1.4,2.5]]) {
+test("the street stands where it was shot: its camera just behind the spot, its ground on the floor", async () => {
+  for (const [height,scale,walk,dolly] of [[1.6,.85,1,0],[1.2,1,0,.2],[2,1.4,2.5,1]]) {
     const f = await fixture();
     const { memory,anchor,splat } = f;
     anchor.position.set(1,height,-2);
     anchor.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),.8);
     memory.setFloor(-height);
-    memory.setTuning({ sceneScale:scale, walkDistance:walk });
+    memory.setTuning({ sceneScale:scale, walkDistance:walk, dolly });
     anchor.updateWorldMatrix(true,true);
     const settings = memory.getSettings();
+    const { captureOffset, streetStart } = memory.layout;
+    const { spot } = phoneAt(f,new THREE.Vector3());
+    // The capture camera stands captureOffset behind the spot, on its view axis.
+    const fromSpot = spot.worldToLocal(new THREE.Vector3().setFromMatrixPosition(splat.mesh.matrixWorld));
+    close(fromSpot.x,0); close(fromSpot.y,0); close(fromSpot.z,captureOffset);
+    close(captureOffset,Math.min(dolly*1.803/.85*scale,settings.captureGroundStart*scale-.5));
+    // That axis tilts as the capture camera did, under half a degree.
+    const level = Math.max(captureOffset*Math.sin(THREE.MathUtils.degToRad(.5)),1e-8);
     const placed = point => anchor.worldToLocal(point.clone().applyMatrix4(splat.mesh.matrixWorld));
     const camera = placed(new THREE.Vector3());
-    close(camera.x,0); close(camera.y,-height+settings.captureCameraHeight*scale); close(camera.z,-walk);
+    close(camera.x,0); assert.ok(Math.abs(camera.y+height-settings.captureCameraHeight*scale) <= level);
     // SHARP's OpenCV frame: the ground below the photographer, and the street's start.
     const up = new THREE.Vector3(...settings.captureGroundUp).normalize();
     const ahead = new THREE.Vector3(0,0,1).addScaledVector(up,-up.z).normalize();
     const start = up.clone().multiplyScalar(-settings.captureCameraHeight).addScaledVector(ahead,settings.captureGroundStart);
     const begins = placed(start);
-    close(begins.x,0); close(begins.y,-height); close(begins.z,-walk-memory.layout.streetStart);
+    close(begins.x,0); assert.ok(Math.abs(begins.y+height) <= level);
+    assert.ok(Math.abs(begins.z+walk+streetStart) <= level);
+    close(streetStart+captureOffset,settings.captureGroundStart*scale);
     close(memory.layout.streetStart-memory.layout.portalDistance,memory.layout.sceneDistance);
     // The street keeps its captured scale and runs straight ahead on the floor.
     const further = placed(start.clone().addScaledVector(ahead,1));
-    close(further.x,0); close(further.y,-height); close(further.z,begins.z-scale);
+    close(further.x,0); close(further.y,begins.y); close(further.z,begins.z-scale);
     const aside = placed(start.clone().add(new THREE.Vector3().crossVectors(up,ahead)));
-    close(aside.y,-height); close(Math.abs(aside.x),scale);
+    close(aside.y,begins.y); close(Math.abs(aside.x),scale);
     memory.dispose();
   }
 });
@@ -299,11 +347,40 @@ test("holding the phone sideways at the spot pulls the photograph onto it, then 
   assert.equal(memory.phase,"colorizing");
   close(Math.round((now-10)*20)/20,memory.getSettings().matchHold);
   assert.ok(halfway > 0 && halfway < offset.length());
-  // The stage now sits exactly where the phone is: the cut is pixel for pixel.
+  // The stage now sits exactly where the phone is and turns where it points,
+  // so the photograph sits straight ahead of it, filling the frame.
   close(memory.correction.distanceTo(offset),0);
+  close(memory.correctionHeading,.05);
+  const photo = f.matte.parent.children.find(o => o.material?.uniforms?.photograph);
+  const seen = camera.worldToLocal(photo.getWorldPosition(new THREE.Vector3()));
+  close(seen.x,0); close(seen.y,0); close(seen.z,-memory.layout.photoDistance);
   assert.equal(memory.match,null);
   memory.reset();
   close(memory.correction.length(),0);
+  memory.dispose();
+});
+
+test("the guide frame stays fixed on the screen however the phone moves", async () => {
+  const f = await fixture();
+  const { memory } = f;
+  await memory.prepare(f.context);
+  const guide = f.matte.parent.parent.children.find(o => o.children.length === 4 && o.children.every(bar => bar.material?.isMeshBasicMaterial));
+  const poses = [[new THREE.Vector3(0,0,.4),{}],[new THREE.Vector3(.2,-.05,.1),{ yaw:.3, roll:.1 }],[new THREE.Vector3(-.1,.05,.6),{ yaw:-.2 }]];
+  poses.forEach(([offset,angles],n) => {
+    const { camera, canvas } = phoneAt(f,offset,angles);
+    memory.update(camera,canvas,40+n);
+    assert.ok(guide.visible);
+    guide.updateWorldMatrix(true,false);
+    const local = camera.worldToLocal(guide.getWorldPosition(new THREE.Vector3()));
+    close(local.x,0); close(local.y,0); close(local.z,-memory.layout.photoDistance);
+    const turn = camera.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(guide.getWorldQuaternion(new THREE.Quaternion()));
+    close(Math.abs(turn.w),1);
+  });
+  // Under rotation lock the frame turns a quarter so its long side stays across the screen.
+  const { camera, canvas } = phoneAt(f,new THREE.Vector3(0,0,.4),{ roll:Math.PI/2, wide:false });
+  memory.update(camera,canvas,50);
+  const turn = camera.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(guide.getWorldQuaternion(new THREE.Quaternion()));
+  close(Math.abs(new THREE.Euler().setFromQuaternion(turn).z),Math.PI/2);
   memory.dispose();
 });
 

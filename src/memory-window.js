@@ -5,7 +5,7 @@ import { MEMORY_WAVE_GLSL } from "./memory-wave.js";
 import { attachMemoryModifier } from "./memory-splat.js";
 import { createMemoryParticles } from "./memory-particles.js";
 import { apertureDistance } from "./memory-placement.js";
-import { photographerLayout, alignment, uprightTurn } from "./photographer.js";
+import { DEFAULT_SCREEN, photographerLayout, alignment, heading, uprightTurn } from "./photographer.js";
 import { updateMatte } from "./window-rig.js";
 import { warmMemory, primeMemory } from "./memory-warmup.js";
 
@@ -14,8 +14,7 @@ const GUIDE_FADE = 0.5;
 
 /**
  * The target frame for the match: the photograph's outline as it looks from
- * the photographer's spot, carried along with the viewer. Only stepping, not
- * aiming, lines the photograph up with it.
+ * the spot, fixed on the screen like a viewfinder's.
  */
 function createGuide() {
   const material = new THREE.MeshBasicMaterial({ color: 0xfff0d6, transparent: true, opacity: 0, depthTest: false, depthWrite: false, toneMapped: false });
@@ -33,9 +32,10 @@ function createGuide() {
         bars[n].scale.set(width, height, 1);
       }
     },
-    show(position, opacity) {
+    show(position, quaternion, opacity) {
       group.visible = opacity > 0;
       group.position.copy(position);
+      group.quaternion.copy(quaternion);
       material.opacity = opacity;
     },
     get opacity() { return group.visible ? material.opacity : 0; },
@@ -51,12 +51,14 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
   texture.colorSpace = THREE.SRGBColorSpace;
   colorTexture.colorSpace = THREE.SRGBColorSpace;
   settings = { ...settings };
+  // The phone's screen sets how large the matched photograph is; AR measures it at placement.
+  let screen = DEFAULT_SCREEN;
   // Live layout, shared with the splat modifier; tuning updates it in place.
-  const layout = { ...photographerLayout(settings) };
+  const layout = { ...photographerLayout(settings, screen) };
   const { photoWidth, photoHeight } = layout;
   const baseLayout = { ...layout };
-  // The photographer's spot as placed, and the stage the memory stands on.
-  // Holding the match pulls the stage from the spot onto the viewer.
+  // The spot as placed, where the viewer matches the photograph, and the stage
+  // the memory stands on. Holding the match pulls the stage onto the viewer.
   const spot = new THREE.Group();
   const stage = new THREE.Group();
   spot.add(stage);
@@ -117,8 +119,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
   photo.position.z = -layout.photoDistance;
   photo.renderOrder = 1;
   stage.add(photo);
+  // The guide rides with the camera rather than the stage, so the match's
+  // easing never moves it on screen.
   const guide = createGuide();
-  stage.add(guide.group);
+  spot.add(guide.group);
 
   const updateSplats = attachMemoryModifier(splat.mesh, stage, layout, settings);
   const particles = createMemoryParticles(photoWidth, photoHeight, layout.photoDistance, colorTexture, settings);
@@ -142,14 +146,19 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
   let preparing = null;
   // The match: AR pauses it while tracking is unsure. `lock` is how far the
   // stage has been pulled onto the viewer, eased in over the match hold, and
-  // `held` where the viewer last stood within tolerance, in the spot's frame.
+  // `held` and `heldHeading` where the viewer last stood and pointed within
+  // tolerance, in the spot's frame.
   let matching = true;
   let match = null; // The latest alignment while the photograph waits.
   let lock = 0;
   let lastUpdate = null;
   let guideFrom = 0; // The guide's opacity when the activation started.
   const held = new THREE.Vector3();
+  let heldHeading = 0;
   const guidePosition = new THREE.Vector3();
+  const guideRotation = new THREE.Quaternion();
+  const spotUp = new THREE.Vector3(0, 1, 0);
+  const screenAxis = new THREE.Vector3(0, 0, 1);
   const view = { eye: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(), forward: new THREE.Vector3(), wide: true };
   const viewRotation = new THREE.Quaternion();
   const cameraRotation = new THREE.Quaternion();
@@ -166,18 +175,19 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     new THREE.Vector3().crossVectors(groundUp, groundBack), groundUp, groundBack)).invert();
 
   function refreshLayout() {
-    Object.assign(layout, photographerLayout(settings));
+    Object.assign(layout, photographerLayout(settings, screen));
     photo.scale.set(layout.photoWidth/baseLayout.photoWidth, layout.photoHeight/baseLayout.photoHeight, 1);
     material.uniforms.photoSize.value.set(layout.photoWidth,layout.photoHeight);
     guide.layout(layout);
-    // The capture camera stands at the spot, `walkDistance` ahead of the
-    // placement and `eyeHeight` above the floor, so the street, scaled about
-    // that camera, keeps its ground on the floor and every capture ray.
+    // The spot stands `walkDistance` ahead of the placement at the
+    // photographer's eye height, and the capture camera just behind it by the
+    // dolly's offset, so the street, scaled about that camera, keeps its
+    // ground on the floor.
     spot.position.set(0, floorY+layout.eyeHeight, -settings.walkDistance);
     spot.quaternion.copy(level);
     splat.pivot.quaternion.identity();
     splat.pivot.scale.setScalar(settings.sceneScale);
-    splat.root.position.set(0, 0, 0);
+    splat.root.position.set(0, 0, layout.captureOffset);
   }
 
   // The camera's position and axes in `frame`, and whether the screen is wide.
@@ -193,9 +203,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     return view;
   }
 
-  // While the photograph waits, measure the viewer against the spot. Holding
-  // within tolerance eases the stage onto them, so the cut lands exactly where
-  // they stand, and starts the activation once it arrives.
+  // While the photograph waits, measure where it sits in the guide frame.
+  // Holding it there eases the stage onto the viewer, standing where they
+  // stand and turned to where they point, so the photograph settles exactly
+  // into the frame and the cut lands there; then the activation starts.
   function matchViewer(camera, canvas, now) {
     const elapsed = lastUpdate === null ? 0 : THREE.MathUtils.clamp(now-lastUpdate, 0, 0.1);
     lastUpdate = now;
@@ -204,26 +215,33 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     viewIn(spot, camera, canvas);
     if (!ready || !matching || phase !== "dormant" || startedAt !== null || frozenSeconds !== undefined) return;
     match = alignment(view, layout, settings.matchTolerance);
-    if (match.aligned) held.copy(view.eye);
+    if (match.aligned) {
+      held.copy(view.eye);
+      heldHeading = heading(view.forward);
+    }
     lock = THREE.MathUtils.clamp(lock+(match.aligned ? elapsed : -elapsed)/Math.max(settings.matchHold, 1e-3), 0, 1);
-    stage.position.copy(held).multiplyScalar(spatialEase(lock));
+    const pull = spatialEase(lock);
+    stage.position.copy(held).multiplyScalar(pull);
+    stage.quaternion.setFromAxisAngle(spotUp, heldHeading*pull);
     if (lock === 1 && match.aligned) api.activate(now);
   }
 
   // The guide frame and the instruction, upright and nearest the floor for
-  // the phone as held, whether or not the page turned with it.
+  // the phone as held, whether or not the page turned with it. The frame sits
+  // straight ahead of the camera, its long side along the screen's.
   function showGuidance(canvas) {
-    if (!anchor.visible) guide.show(guidePosition, 0);
+    const turn = uprightTurn(view.right.y, view.up.y);
+    if (!anchor.visible) guide.show(guidePosition, guideRotation, 0);
     else {
-      guidePosition.copy(view.eye).sub(stage.position).z -= layout.photoDistance;
+      guidePosition.copy(view.forward).multiplyScalar(layout.photoDistance).add(view.eye);
+      guideRotation.setFromAxisAngle(screenAxis, -THREE.MathUtils.degToRad(turn)).premultiply(viewRotation);
       const fade = startedAt === null ? 0 : guideFrom*(1-THREE.MathUtils.clamp(frame.seconds/GUIDE_FADE, 0, 1));
-      guide.show(guidePosition, match?.landscape ? 0.55+0.45*spatialEase(lock) : fade);
+      guide.show(guidePosition, guideRotation, match?.landscape ? 0.55+0.45*spatialEase(lock) : fade);
     }
     if (!hint) return;
     const text = match?.hint ?? "";
     hint.hidden = !text;
     if (!text) { hintKey = ""; return; }
-    const turn = uprightTurn(view.right.y, view.up.y);
     const rect = canvas.getBoundingClientRect();
     const inset = 56;
     const [x, y] = turn === 0 ? [rect.left+rect.width/2, rect.bottom-inset]
@@ -249,10 +267,11 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     // Keep the generated splat layout resident while dormant; the modifier's
     // zero reveal hides it without discarding its warmed rendering resources.
     splat.root.visible = true;
-    // The aperture recedes along the photographer's frustum: from the spot it
-    // keeps the photograph's frame exactly while it grows into the portal.
+    // The aperture recedes from the photograph to the portal, and from the
+    // spot it grows evenly from the photograph's frame to the portal's.
     const distance = apertureDistance(frame.growth, layout);
-    opening = { centerY: 0, distance, width: 2*layout.tanX*distance, height: 2*layout.tanY*distance };
+    const scale = THREE.MathUtils.lerp(layout.photoScale, layout.portalScale, frame.growth);
+    opening = { centerY: 0, distance, width: 2*scale*layout.tanX*distance, height: 2*scale*layout.tanY*distance };
     // Scaling the matte also scales its rectangular hole; this avoids building
     // and discarding geometry on every frame of the expansion.
     matte.scale.set(opening.width/baseLayout.photoWidth, opening.height/baseLayout.photoHeight, 1);
@@ -279,6 +298,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     get match() { return match; },
     /** The stage's pull from the spot onto the viewer: the match's correction. */
     get correction() { return stage.position.clone(); },
+    /** How far the match has turned the stage, in radians about the spot's up. */
+    get correctionHeading() { return new THREE.Euler().setFromQuaternion(stage.quaternion, "YXZ").y; },
     effectsCamera(camera) {
       // Ambient effects are evaluated in capture space. The settled street is
       // the capture placed rigidly, so the live camera applies unchanged; the
@@ -300,6 +321,12 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     /** AR pauses the match while tracking is unsure. */
     setMatching(enabled) {
       matching = Boolean(enabled);
+    },
+    /** The screen's half-angle tangents, `{ tanLong, tanShort }`; see screenTangents. */
+    setScreen(next) {
+      if (!(next?.tanLong > 0 && next?.tanShort > 0 && Number.isFinite(next.tanLong) && Number.isFinite(next.tanShort))) throw new Error("Screen tangents must be positive");
+      screen = Object.freeze({ tanLong: next.tanLong, tanShort: next.tanShort });
+      refreshLayout();
     },
     setTuning(values) {
       const keys = MEMORY_TUNING_PARAMETERS.map(({ key }) => key);
@@ -359,7 +386,9 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
       frozenSeconds = undefined;
       lock = 0;
       held.set(0, 0, 0);
+      heldHeading = 0;
       stage.position.set(0, 0, 0);
+      stage.quaternion.identity();
       apply(null);
       if (hint) hint.hidden = true;
     },

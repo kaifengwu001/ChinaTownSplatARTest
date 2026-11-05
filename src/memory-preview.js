@@ -10,6 +10,7 @@ import { readMemorySettings } from "./memory-settings.js";
 import { SPLAT_ASSETS } from "./scene-assets.js";
 import { createMemoryFlowControls } from "./memory-flow-controls.js";
 import { createArTuning } from "./ar/tuning.js";
+import { screenTangents } from "./photographer.js";
 
 const STAGES = { dormant: "A photograph, waiting", colorizing: "Color ripples across the surface", surface: "The reconstructed photograph", expanding: "The street opens into depth", active: "A window into the memory" };
 const ASSETS = SPLAT_ASSETS;
@@ -116,6 +117,7 @@ async function main() {
     if (!Number.isFinite(seconds) || seconds < 0) throw new Error("?t must be a non-negative number of seconds");
     memory.seek(seconds);
   }
+  let framedAspect = 0;
   renderer.setAnimationLoop(() => {
     // A phone at the photographer's eye height, level and facing the
     // photograph, walked forward from the placement and glancing sideways.
@@ -124,7 +126,13 @@ async function main() {
     camera.position.set(Number(viewpoint.value), FLOOR_Y+memory.layout.eyeHeight, -Number(walk.value));
     const tangent = Math.tan(THREE.MathUtils.degToRad(PHONE_FOV/2));
     const fov = THREE.MathUtils.radToDeg(2*Math.atan(camera.aspect >= 1 ? tangent/camera.aspect : tangent));
-    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    if (camera.fov !== fov || camera.aspect !== framedAspect) {
+      camera.fov = fov;
+      framedAspect = camera.aspect;
+      camera.updateProjectionMatrix();
+      // The matched photograph covers its share of this screen.
+      memory.setScreen(screenTangents(camera.projectionMatrix.elements));
+    }
     const now = performance.now() / 1000;
     flowControls?.update(now);
     arTuning?.update(now);
