@@ -43,7 +43,7 @@ function createGuide() {
   };
 }
 
-export async function createMemoryWindow({ anchor, splat, matte, config, hint, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
+export async function createMemoryWindow({ anchor, splat, matte, config, hint, cards, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
   const loader = new THREE.TextureLoader();
   const [texture, colorTexture] = await Promise.all([
     loader.loadAsync(settings.photoUrl), loader.loadAsync(settings.colorPhotoUrl),
@@ -153,6 +153,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
   let lock = 0;
   let lastUpdate = null;
   let guideFrom = 0; // The guide's opacity when the activation started.
+  // The match is made and a card is flying into the frame; activation waits for it.
+  let arriving = false;
   const held = new THREE.Vector3();
   let heldHeading = 0;
   const guidePosition = new THREE.Vector3();
@@ -213,7 +215,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     match = null;
     if (!camera || !anchor.visible) return;
     viewIn(spot, camera, canvas);
-    if (!ready || !matching || phase !== "dormant" || startedAt !== null || frozenSeconds !== undefined) return;
+    if (!ready || !matching || phase !== "dormant" || startedAt !== null || frozenSeconds !== undefined || arriving) return;
     match = alignment(view, layout, settings.matchTolerance);
     if (match.aligned) {
       held.copy(view.eye);
@@ -223,7 +225,24 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     const pull = spatialEase(lock);
     stage.position.copy(held).multiplyScalar(pull);
     stage.quaternion.setFromAxisAngle(spotUp, heldHeading*pull);
-    if (lock === 1 && match.aligned) api.activate(now);
+    if (lock === 1 && match.aligned) {
+      if (cards) arrive();
+      else api.activate(now);
+    }
+  }
+
+  // The memory holds where the match left it while the arriving card flies
+  // into the frame; its landing starts the activation, and it dissolves into
+  // the street as the colour comes.
+  function arrive() {
+    arriving = true;
+    match = null;
+    cards.fly().then(() => {
+      if (!arriving) return;
+      // On the clock `update` runs on, as of its latest frame.
+      api.activate(lastUpdate ?? undefined);
+      cards.dissolve();
+    });
   }
 
   // The guide frame and the instruction, upright and nearest the floor for
@@ -236,18 +255,23 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
       guidePosition.copy(view.forward).multiplyScalar(layout.photoDistance).add(view.eye);
       guideRotation.setFromAxisAngle(screenAxis, -THREE.MathUtils.degToRad(turn)).premultiply(viewRotation);
       const fade = startedAt === null ? 0 : guideFrom*(1-THREE.MathUtils.clamp(frame.seconds/GUIDE_FADE, 0, 1));
-      guide.show(guidePosition, guideRotation, match?.landscape ? 0.55+0.45*spatialEase(lock) : fade);
+      guide.show(guidePosition, guideRotation, arriving ? 1 : match?.landscape ? 0.55+0.45*spatialEase(lock) : fade);
     }
+    if (!hint && !cards) return;
+    const rect = canvas.getBoundingClientRect();
+    // The deck is out while the viewer lines the photograph up, phone sideways.
+    const dealt = Boolean(match?.landscape);
+    cards?.update({ shown: dealt, turn, rect,
+      frame: [layout.photoScale*layout.tanX/screen.tanLong, layout.photoScale*layout.tanY/screen.tanShort] });
     if (!hint) return;
     const text = match?.hint ?? "";
     hint.hidden = !text;
     if (!text) { hintKey = ""; return; }
-    const rect = canvas.getBoundingClientRect();
-    const inset = 56;
-    const [x, y] = turn === 0 ? [rect.left+rect.width/2, rect.bottom-inset]
-      : turn === 90 ? [rect.left+inset, rect.top+rect.height/2]
-      : turn === -90 ? [rect.right-inset, rect.top+rect.height/2]
-      : [rect.left+rect.width/2, rect.top+inset];
+    // Nearest the floor, or nearest the sky while the deck holds the bottom.
+    const side = cards && dealt ? 1 : -1, inset = side > 0 ? 19 : 56;
+    const angle = THREE.MathUtils.degToRad(turn), sin = Math.round(Math.sin(angle)), cos = Math.round(Math.cos(angle));
+    const reach = Math.abs(sin)*rect.width/2+Math.abs(cos)*rect.height/2-inset;
+    const x = rect.left+rect.width/2+side*sin*reach, y = rect.top+rect.height/2-side*cos*reach;
     const key = `${text}|${turn}|${Math.round(x)}|${Math.round(y)}`;
     if (key === hintKey) return;
     hintKey = key;
@@ -255,6 +279,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
     hint.style.left = `${Math.round(x)}px`;
     hint.style.top = `${Math.round(y)}px`;
     hint.style.transform = `translate(-50%, -50%) rotate(${turn}deg)`;
+    hint.classList.toggle("match-hint--compact", side > 0);
   }
 
   function apply(seconds, camera, dpr = 1) {
@@ -375,6 +400,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
       if (!ready || !anchor.visible || phase !== "dormant") return false;
       frozenSeconds = undefined;
       startedAt = now;
+      arriving = false;
       guideFrom = guide.opacity;
       match = null;
       apply(0);
@@ -385,6 +411,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, s
       startedAt = null;
       frozenSeconds = undefined;
       lock = 0;
+      arriving = false;
+      cards?.reset();
       held.set(0, 0, 0);
       heldHeading = 0;
       stage.position.set(0, 0, 0);

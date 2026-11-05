@@ -22,21 +22,24 @@ test("scene size alone sets the photographer's eye, the portal and the street", 
   // SHARP's assumed 30mm lens: a 60° by 46.8° frame.
   close(2*THREE.MathUtils.radToDeg(Math.atan(tanX)), 59.96, 0.01);
   close(2*THREE.MathUtils.radToDeg(Math.atan(tanY)), 46.79, 0.01);
-  close(eyeHeight, 1.7*0.85);
+  const { captureCameraHeight, captureGroundStart, sceneScale } = MEMORY_SETTINGS;
+  close(eyeHeight, captureCameraHeight*sceneScale);
+  // The matching height stays where it was tuned on a phone.
+  close(eyeHeight, 1.445, 0.002);
   // Without the dolly the portal fills the photographer's frame and its bottom edge rests on the floor.
   assert.equal(captureOffset, 0); assert.equal(portalScale, 1);
   close(portalHeight/2, portalDistance*tanY);
   close(portalHeight/2, eyeHeight);
   close(portalWidth/portalHeight, MEMORY_SETTINGS.captureAspect);
-  close(portalDistance, 3.34, 0.005);
+  close(portalDistance, eyeHeight/tanY);
   // The street begins just in front of the portal, where the frame meets the ground.
-  close(exact.sceneDistance, 3.78*0.85-portalDistance);
-  assert.ok(exact.sceneDistance < 0 && exact.sceneDistance > -0.2);
+  close(exact.sceneDistance, captureGroundStart*sceneScale-portalDistance);
+  assert.ok(exact.sceneDistance < 0 && exact.sceneDistance > -0.4);
   for (const sceneScale of [0.5, 1, 1.6]) {
     const scaled = photographerLayout({ ...MEMORY_SETTINGS, sceneScale });
-    close(scaled.portalDistance/layout.portalDistance, sceneScale/0.85);
-    close(scaled.captureOffset/layout.captureOffset, sceneScale/0.85);
-    close(scaled.sceneDistance/layout.sceneDistance, sceneScale/0.85);
+    close(scaled.portalDistance/layout.portalDistance, sceneScale/MEMORY_SETTINGS.sceneScale);
+    close(scaled.captureOffset/layout.captureOffset, sceneScale/MEMORY_SETTINGS.sceneScale);
+    close(scaled.sceneDistance/layout.sceneDistance, sceneScale/MEMORY_SETTINGS.sceneScale);
   }
   // The photograph always stays in front of the portal.
   const tiny = photographerLayout({ ...MEMORY_SETTINGS, sceneScale: 0.2, photoDistance: 3 });
@@ -44,16 +47,18 @@ test("scene size alone sets the photographer's eye, the portal and the street", 
 });
 
 test("the dolly zooms: the frame keeps content at three times the street's start, nearer grows and farther shrinks", () => {
-  const street = 3.78*0.85;
-  // Dolly 1 is the tap version: its viewer stood 1.80 m in front of the photographer.
-  close(photographerLayout({ ...MEMORY_SETTINGS, dolly: 1 }).captureOffset, 1.803, 1e-9);
+  const street = MEMORY_SETTINGS.captureGroundStart*MEMORY_SETTINGS.sceneScale;
+  // Dolly 1 is the tap version: its viewer stood 1.80 m in front of the
+  // photographer, 0.56 of the way to the street's start at 3.21 m.
+  close(photographerLayout({ ...MEMORY_SETTINGS, dolly: 1 }).captureOffset, 1.803/3.213*street);
+  close(photographerLayout({ ...MEMORY_SETTINGS, captureGroundStart: 3.78, sceneScale: 0.85, dolly: 1 }).captureOffset, 1.803, 1e-9);
   const { captureOffset: d, portalScale, portalDistance, tanY, eyeHeight, portalWidth, portalHeight } = layout;
-  close(d, 0.3*1.803);
+  close(d, 0.3*1.803/3.213*street);
   // Size in the finished frame, relative to the photograph's, of content `depth` from the capture camera.
   const inFrame = depth => depth/(depth-d)/portalScale;
   close(inFrame(3*street), 1);
-  // The children, about 4.7 m out, grow 7%; the sky shrinks 5.6%.
-  assert.ok(inFrame(4.7) > 1.065 && inFrame(4.7) < 1.07);
+  // Peter SooHoo, a quarter beyond the street's start, grows 9%; the sky shrinks 5.6%.
+  assert.ok(inFrame(1.25*street) > 1.085 && inFrame(1.25*street) < 1.095);
   assert.ok(inFrame(1e6) < 0.95 && inFrame(1e6) > 0.94);
   // The grown portal still stands on the floor, the same size, a little nearer the spot.
   close(portalScale*tanY*portalDistance, eyeHeight);

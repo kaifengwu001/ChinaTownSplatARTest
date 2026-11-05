@@ -11,8 +11,10 @@ const FACING = Math.cos(15*DEGREE);
 // Nearer than this fraction of its distance, the viewer has walked into it.
 const TOO_CLOSE = 0.25;
 // Dolly 1 restores the tap version, whose viewer stood 1.80 m in front of the
-// photographer at scene size 0.85: this many metres of the captured street.
-const TAP_DOLLY = 1.803/0.85;
+// photographer, 0.56 of the way to where the street began (3.21 m). Measured
+// against the street's start, as the dolly's pivot is, the same dolly looks
+// the same in any reconstruction.
+const TAP_DOLLY = 1.803/3.213;
 // The street begins at least this far ahead of the spot.
 const STREET_AHEAD = 0.5;
 
@@ -61,7 +63,7 @@ export function photographerLayout(settings, screen = DEFAULT_SCREEN) {
   const tanY = tanX/settings.captureAspect;
   const eyeHeight = settings.captureCameraHeight*settings.sceneScale;
   const captureStreet = settings.captureGroundStart*settings.sceneScale;
-  const captureOffset = Math.max(0, Math.min(settings.dolly*TAP_DOLLY*settings.sceneScale, captureStreet-STREET_AHEAD));
+  const captureOffset = Math.max(0, Math.min(settings.dolly*TAP_DOLLY*captureStreet, captureStreet-STREET_AHEAD));
   const subject = 3*captureStreet;
   const portalScale = subject/(subject-captureOffset);
   // The capture camera was level, so the bottom of the portal's frame meets

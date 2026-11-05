@@ -24,7 +24,7 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-async function fixture(compile = async () => {}) {
+async function fixture(compile = async () => {}, options = {}) {
   let generators = 0;
   const mesh = new THREE.Mesh();
   mesh.rotation.x = Math.PI; // SHARP's OpenCV frame, as loadSplatScene sets it
@@ -34,7 +34,7 @@ async function fixture(compile = async () => {}) {
   splat.pivot.add(mesh); splat.root.add(splat.pivot);
   const matte = createMatte({ occluder:true });
   const anchor = createAnchor(matte,splat.root);
-  const memory = await createMemoryWindow({ anchor, splat, matte, config:DEFAULTS });
+  const memory = await createMemoryWindow({ anchor, splat, matte, config:DEFAULTS, ...options });
   anchor.visible = true; anchor.position.y = 1.6;
   memory.setFloor(-1.6); memory.reset();
   const gl = { SYNC_GPU_COMMANDS_COMPLETE:1, TIMEOUT_EXPIRED:2, WAIT_FAILED:3,
@@ -136,8 +136,9 @@ function phoneAt(f, offset, { roll = 0, yaw = 0, wide = true } = {}) {
   camera.position.copy(spot.localToWorld(offset.clone()));
   camera.quaternion.copy(spot.getWorldQuaternion(new THREE.Quaternion()))
     .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,yaw,roll,"YXZ")));
-  const canvas = wide ? { width:844, height:390, clientWidth:844, clientHeight:390 }
-    : { width:390, height:844, clientWidth:390, clientHeight:844 };
+  const [width,height] = wide ? [844,390] : [390,844];
+  const canvas = { width, height, clientWidth:width, clientHeight:height,
+    getBoundingClientRect:() => ({ left:0, top:0, width, height, right:width, bottom:height }) };
   return { camera, canvas, spot };
 }
 
@@ -304,7 +305,7 @@ test("the street stands where it was shot: its camera just behind the spot, its 
     // The capture camera stands captureOffset behind the spot, on its view axis.
     const fromSpot = spot.worldToLocal(new THREE.Vector3().setFromMatrixPosition(splat.mesh.matrixWorld));
     close(fromSpot.x,0); close(fromSpot.y,0); close(fromSpot.z,captureOffset);
-    close(captureOffset,Math.min(dolly*1.803/.85*scale,settings.captureGroundStart*scale-.5));
+    close(captureOffset,Math.min(dolly*1.803/3.213*settings.captureGroundStart*scale,settings.captureGroundStart*scale-.5));
     // That axis tilts as the capture camera did, under half a degree.
     const level = Math.max(captureOffset*Math.sin(THREE.MathUtils.degToRad(.5)),1e-8);
     const placed = point => anchor.worldToLocal(point.clone().applyMatrix4(splat.mesh.matrixWorld));
@@ -381,6 +382,31 @@ test("the guide frame stays fixed on the screen however the phone moves", async 
   memory.update(camera,canvas,50);
   const turn = camera.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(guide.getWorldQuaternion(new THREE.Quaternion()));
   close(Math.abs(new THREE.Euler().setFromQuaternion(turn).z),Math.PI/2);
+  memory.dispose();
+});
+
+test("with a deck, the arriving card flies in before the activation, which its landing starts", async () => {
+  const calls = [];
+  let land;
+  const cards = { update(state) { calls.push(["update",state.shown]); }, reset() { calls.push(["reset"]); },
+    fly() { calls.push(["fly"]); return new Promise(resolve => { land = resolve; }); }, dissolve() { calls.push(["dissolve"]); } };
+  const f = await fixture(undefined, { cards });
+  const { memory } = f;
+  await memory.prepare(f.context);
+  const { camera, canvas } = phoneAt(f,new THREE.Vector3(.01,0,.02));
+  let now = 60;
+  while (!calls.some(([name]) => name === "fly") && now < 62) memory.update(camera,canvas,now += .05);
+  assert.ok(calls.some(([name,shown]) => name === "update" && shown),"the deck is out while matching");
+  assert.equal(memory.phase,"dormant","the card is still flying");
+  const held = memory.correction;
+  for (let n = 0; n < 5; n++) memory.update(phoneAt(f,new THREE.Vector3(.08,.03,.1)).camera,canvas,now += .05);
+  close(memory.correction.distanceTo(held),0);
+  assert.equal(memory.match,null,"no hint while it flies");
+  land(); await new Promise(setImmediate);
+  assert.equal(memory.update(camera,canvas,now += .05).phase,"colorizing");
+  assert.deepEqual(calls.filter(([name]) => name !== "update").map(([name]) => name),["reset","fly","dissolve"]);
+  memory.reset();
+  assert.equal(calls.at(-1)[0],"reset");
   memory.dispose();
 });
 

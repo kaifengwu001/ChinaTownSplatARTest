@@ -14,7 +14,8 @@ export const PARTICLE_FLOW_PARAMETERS = Object.freeze([
 
 export const MEMORY_SETTINGS = Object.freeze({
   photoUrl: new URL("../input/apalabassa-original.jpg", import.meta.url).href,
-  colorPhotoUrl: new URL("../input/apalabassa.jpg", import.meta.url).href,
+  // The restoration with Peter SooHoo standing in the street, who lived there.
+  colorPhotoUrl: new URL("../input/apalabassa-soohoo.webp", import.meta.url).href,
   captureAspect: 1448 / 1086,
   // SHARP assumed a 30mm lens on a 36x24mm sensor, using the image diagonal.
   captureFocalRatio: 30 * Math.hypot(1448, 1086) / Math.hypot(36, 24) / 1448,
@@ -22,14 +23,15 @@ export const MEMORY_SETTINGS = Object.freeze({
   // fractions of the original's width and height from its top-left corner:
   // left, top, right, bottom. The restoration cropped the original's top and
   // bottom and stretched it to 4:3. From scripts/register_original.py.
-  originalFrame: Object.freeze([0.0043, 0.0574, 0.9981, 0.9644]),
+  originalFrame: Object.freeze([0.0044, 0.0569, 0.9979, 0.9660]),
   // The capture's street, from scripts/fit_ground.py in SHARP's OpenCV frame:
   // the ground's up direction, the camera's height above it, and how far ahead
   // the reconstructed street begins. The photographer's camera was level.
-  // Update these with the reconstruction.
-  captureGroundUp: Object.freeze([-0.00371, -0.99997, -0.00705]),
-  captureCameraHeight: 1.7,
-  captureGroundStart: 3.78,
+  // Update these with the reconstruction. With Peter in the street SHARP sees
+  // the scene about 0.8 of the size it saw it without him.
+  captureGroundUp: Object.freeze([-0.00991, -0.99995, 0.00159]),
+  captureCameraHeight: 1.39,
+  captureGroundStart: 2.97,
   colorDuration: 2.7,
   flatHoldDuration: 0.35,
   depthDuration: 3.1,
@@ -50,10 +52,10 @@ export const MEMORY_SETTINGS = Object.freeze({
   dolly: 0.3,
   matchTolerance: 4,
   matchHold: 0.6,
-  // The street at 0.85 of its captured size, tuned on a phone. The
-  // photographer's eye, and so the phone at the match, is 1.70 m x 0.85 above
-  // the floor.
-  sceneScale: 0.85,
+  // The street at 1.04 of its captured size, which keeps the photographer's
+  // eye, and so the phone at the match, 1.39 m x 1.04 = 1.445 m above the
+  // floor, as tuned on a phone with the earlier reconstruction at 0.85.
+  sceneScale: 1.04,
   // The spill is a fan of light from the portal's sides: its full angle, and
   // the penumbra angle by which its edges blur wider with distance.
   spillStrength: 6.3,

@@ -11,6 +11,8 @@ import { SPLAT_ASSETS } from "./scene-assets.js";
 import { createMemoryFlowControls } from "./memory-flow-controls.js";
 import { createArTuning } from "./ar/tuning.js";
 import { screenTangents } from "./photographer.js";
+import { createMemoryCards } from "./memory-cards.js";
+import { PEOPLE } from "./memory-people.js";
 
 const STAGES = { dormant: "A photograph, waiting", colorizing: "Color ripples across the surface", surface: "The reconstructed photograph", expanding: "The street opens into depth", active: "A window into the memory" };
 const ASSETS = SPLAT_ASSETS;
@@ -58,6 +60,7 @@ async function main() {
   const memory = await createMemoryWindow({
     anchor, splat, matte, config: DEFAULTS, settings,
     hint: document.getElementById("match-hint"),
+    cards: createMemoryCards(document.body, PEOPLE),
     onPhase: (phase) => { document.getElementById("stage").textContent = STAGES[phase]; },
   });
   anchor.visible = true;
