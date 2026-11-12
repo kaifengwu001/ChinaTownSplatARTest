@@ -38,26 +38,23 @@ Our App Clip only has to replace the tracker bridge. The page draws over the cam
 
 ```mermaid
 flowchart TB
-  host["<b>AR host</b><br/>Today: Needle's App Clip, or 8th Wall in Safari<br/>Ours: native ARKit, the VPS, the camera feed"]
-  bridge["<b>Tracker bridge: the part our App Clip replaces</b><br/>webxr-bridge.js, xr-bridge.js<br/>pose, projection, floor and tracking, per frame"]
-  page["<b>AR page</b><br/>src/ar/main.js<br/>places the memory (by VPS later), runs the frame loop"]
-  memory["<b>Memory window</b><br/>memory-window.js<br/>the match, the activation's clock, the parts below"]
+  host["<b>AR host</b><br/>today: Needle's App Clip<br/>ours: ARKit and the VPS"]
+  bridge["<b>Tracker bridge</b><br/>ours replaces this one<br/>src/ar/webxr-bridge.js"]
+  page["<b>AR page</b><br/>src/ar/main.js"]
+  memory["<b>Memory window</b><br/>memory-window.js"]
   host -- "ARKit frame" --> bridge
   bridge -- "onBeforeRender(camera)" --> page
   page -- "update(camera, canvas, now)" --> memory
-  subgraph scene["Drawn in the 3D scene"]
-    splats["<b>Splat street</b><br/>memory-splat.js<br/>photo to 3D street and its ground spill"]
-    photo["<b>Photograph</b><br/>memory-wave.js<br/>the colour ripple and particle spray"]
-    plate["<b>Plate holder</b><br/>memory-plate.js<br/>frames the photo, dissolves at colour"]
-    flight["<b>Print flight</b><br/>memory-flight.js<br/>Peter's print in 3D: glide, tilt, shadow"]
-  end
-  subgraph logic["Logic and the overlay"]
-    geometry["<b>Match geometry</b><br/>photographer.js: layout, alignment, hints"]
-    timeline["<b>Timeline and settings</b><br/>memory-timeline.js, memory-settings.js"]
-    pile["<b>Pile and album</b><br/>memory-cards.js, in the DOM overlay"]
-  end
   memory --> scene
   memory --> logic
+  subgraph scene["Drawn in the 3D scene"]
+    direction TB
+    splats["<b>Splat street</b><br/>memory-splat.js"] ~~~ photo["<b>Photograph</b><br/>memory-wave.js"] ~~~ plate["<b>Plate holder</b><br/>memory-plate.js"] ~~~ flight["<b>Print flight</b><br/>memory-flight.js"]
+  end
+  subgraph logic["Logic and the overlay"]
+    direction TB
+    geometry["<b>Match geometry</b><br/>photographer.js"] ~~~ timeline["<b>Timeline, settings</b><br/>memory-timeline.js"] ~~~ pile["<b>Pile and album</b><br/>memory-cards.js"]
+  end
   style bridge stroke-width:3px
 ```
 
