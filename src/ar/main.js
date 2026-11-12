@@ -12,6 +12,7 @@ import { readMemorySettings } from "../memory-settings.js";
 import { screenTangents } from "../photographer.js";
 import { createMemoryCards } from "../memory-cards.js";
 import { PEOPLE } from "../memory-people.js";
+import { loadMemoryProps } from "../memory-props.js";
 import { SPLAT_ASSETS as ASSETS } from "../scene-assets.js";
 import { createArTuning } from "./tuning.js";
 
@@ -110,6 +111,9 @@ async function main() {
   hud.set({ asset: options.assetKey, headroom: geometry(config).headroomDeg, tracker: trackingKind });
   hud.prompt("Loading splats…");
 
+  // The plate holder and the arriving print load alongside the splats.
+  const props = loadMemoryProps(PEOPLE);
+  props.catch(() => {}); // Reported when the memory awaits it.
   const splat = await loadSplatScene(options.assetUrl, { covSplats: true });
   placeSplatScene(splat, config);
   hud.set({ splats: splat.splatCount });
@@ -120,8 +124,9 @@ async function main() {
   hud.prompt("Loading original photograph…");
   const memory = await createMemoryWindow({
     anchor, splat, matte, config, hint: matchHint, settings: readMemorySettings(window.location.search),
-    // Inside the AR overlay, so the deck stays in view while WebXR presents.
+    // Inside the AR overlay, so the stack and its album stay in view while WebXR presents.
     cards: createMemoryCards(document.getElementById("ar-ui"), PEOPLE),
+    ...await props,
     onPhase: (phase) => hud.set({ memory: phase }),
   });
   const tuning = createArTuning(memory,anchor);

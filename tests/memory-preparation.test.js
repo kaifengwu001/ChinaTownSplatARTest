@@ -177,7 +177,8 @@ test("from the spot each street point sits where its pixel was, scaled by the wi
   for (const dolly of [0,.2,1]) {
     const f = await fixture();
     const { memory,splat } = f;
-    memory.setTuning({ sceneScale:.85, photoDistance:.8, dolly });
+    // Matched at the photographer's own height, so nothing is lifted.
+    memory.setTuning({ sceneScale:.85, photoDistance:.8, dolly, matchHeight:memory.getSettings().captureCameraHeight*.85 });
     await memory.prepare(f.context);
     const settings = memory.getSettings();
     const { photoScale, captureOffset } = memory.layout;
@@ -207,7 +208,8 @@ test("with no dolly and the photographer's own frame, the street lies on the pho
   // A screen twice the photographer's frame, which the frame fills at half its height.
   const { tanX, tanY } = memory.layout;
   memory.setScreen({ tanLong:2*tanX, tanShort:2*tanY });
-  memory.setTuning({ dolly:0, matchFrame:.5 });
+  const { captureCameraHeight, sceneScale } = memory.getSettings();
+  memory.setTuning({ dolly:0, matchFrame:.5, matchHeight:captureCameraHeight*sceneScale });
   await memory.prepare(f.context);
   const settings = memory.getSettings();
   close(memory.layout.photoScale,1); close(memory.layout.portalScale,1); close(memory.layout.captureOffset,0);
@@ -258,7 +260,7 @@ test("live match, scene and timing tuning re-derives the layout and reuses shade
   const photo = matte.parent.children.find(o => o.material?.uniforms?.photograph);
   const width = memory.layout.photoWidth;
   const generators = f.generators();
-  memory.setTuning({ walkDistance:1.5, photoDistance:.6, matchFrame:.6, dolly:.5, matchTolerance:6, matchHold:1,
+  memory.setTuning({ walkDistance:1.5, matchHeight:1.62, photoDistance:.6, matchFrame:.6, dolly:.5, matchTolerance:6, matchHold:1,
     sceneScale:1.1, spillStrength:2.5,
     colorDuration:3, flatHoldDuration:.5, depthDuration:4, depthStretch:3, parallaxGain:2 });
   const screen = { tanLong:.7, tanShort:.35 };
@@ -266,13 +268,16 @@ test("live match, scene and timing tuning re-derives the layout and reuses shade
   memory.reset();
   const settings = memory.getSettings();
   assert.deepEqual({ ...memory.layout },{ ...photographerLayout(settings,screen) });
-  const { eyeHeight, portalDistance, tanX, tanY, photoScale, portalScale, captureOffset } = memory.layout;
-  close(eyeHeight,settings.captureCameraHeight*1.1);
+  const { eyeHeight, portalDistance, tanX, tanY, photoScale, portalScale, captureOffset, captureLift } = memory.layout;
+  close(eyeHeight,1.62); close(captureLift,1.62-settings.captureCameraHeight*1.1);
   close(photo.position.z,-.6); close(photo.position.y,0);
   close(photo.scale.x,memory.layout.photoWidth/width); close(memory.layout.photoWidth,1.2*photoScale*tanX);
   close(photoScale,frameScale(.6,screen,tanX,tanY));
   close(matte.parent.parent.position.z,-1.5); close(matte.parent.parent.position.y,-1.6+eyeHeight);
-  close(splat.pivot.scale.x,1.1); close(splat.root.position.z,captureOffset);
+  close(splat.pivot.scale.x,1.1);
+  // The capture camera behind the spot by the dolly's offset, below it by the lift, along the ground's up.
+  const [gx,gy,gz] = settings.captureGroundUp;
+  close(splat.root.position.distanceTo(new THREE.Vector3(0,0,captureOffset).addScaledVector(new THREE.Vector3(gx,-gy,-gz).normalize(),-captureLift)),0);
   assert.ok(captureOffset > 0);
   close(memory.duration,7.5);
   memory.seek(memory.duration);
@@ -281,7 +286,7 @@ test("live match, scene and timing tuning re-derives the layout and reuses shade
   assert.equal(f.generators(),generators,"Uniform tuning must not rebuild shader generators");
   const query = new URLSearchParams(Object.fromEntries(MEMORY_TUNING_PARAMETERS.map(({key}) => [key,memory.getSettings()[key]])));
   const parsed = readMemorySettings(query);
-  close(parsed.walkDistance,1.5); close(parsed.photoDistance,.6); close(parsed.sceneScale,1.1); close(parsed.matchTolerance,6);
+  close(parsed.walkDistance,1.5); close(parsed.matchHeight,1.62); close(parsed.photoDistance,.6); close(parsed.sceneScale,1.1); close(parsed.matchTolerance,6);
   close(parsed.matchFrame,.6); close(parsed.dolly,.5);
   assert.throws(() => memory.setScreen({ tanLong:0, tanShort:.3 }),/positive/);
   assert.throws(() => memory.setTuning({ portalDistance:2 }),/Unknown tuning parameter/);
@@ -290,21 +295,27 @@ test("live match, scene and timing tuning re-derives the layout and reuses shade
   memory.dispose();
 });
 
-test("the street stands where it was shot: its camera just behind the spot, its ground on the floor", async () => {
-  for (const [height,scale,walk,dolly] of [[1.6,.85,1,0],[1.2,1,0,.2],[2,1.4,2.5,1]]) {
+test("the street stands where it was shot: its camera just behind and below the spot, its ground on the floor", async () => {
+  for (const [height,scale,walk,dolly,matchHeight] of [[1.6,.85,1,0,1.55],[1.2,1,0,.2,1.39],[2,1.4,2.5,1,1.7],[1.5,1.04,1,.3,1.3]]) {
     const f = await fixture();
     const { memory,anchor,splat } = f;
     anchor.position.set(1,height,-2);
     anchor.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),.8);
     memory.setFloor(-height);
-    memory.setTuning({ sceneScale:scale, walkDistance:walk, dolly });
+    memory.setTuning({ sceneScale:scale, walkDistance:walk, dolly, matchHeight });
     anchor.updateWorldMatrix(true,true);
     const settings = memory.getSettings();
-    const { captureOffset, streetStart } = memory.layout;
+    const { captureOffset, captureLift, streetStart } = memory.layout;
+    close(captureLift,matchHeight-settings.captureCameraHeight*scale);
     const { spot } = phoneAt(f,new THREE.Vector3());
-    // The capture camera stands captureOffset behind the spot, on its view axis.
+    // The capture camera stands captureOffset behind the spot, on its view
+    // axis, and captureLift below it along the ground's up.
     const fromSpot = spot.worldToLocal(new THREE.Vector3().setFromMatrixPosition(splat.mesh.matrixWorld));
-    close(fromSpot.x,0); close(fromSpot.y,0); close(fromSpot.z,captureOffset);
+    const [gx,gy,gz] = settings.captureGroundUp;
+    const lowered = new THREE.Vector3(0,0,captureOffset).addScaledVector(new THREE.Vector3(gx,-gy,-gz).normalize(),-captureLift);
+    close(fromSpot.distanceTo(lowered),0);
+    // The spot itself is at the matching height above the floor.
+    close(anchor.worldToLocal(spot.getWorldPosition(new THREE.Vector3())).y+height,matchHeight);
     close(captureOffset,Math.min(dolly*1.803/3.213*settings.captureGroundStart*scale,settings.captureGroundStart*scale-.5));
     // That axis tilts as the capture camera did, under half a degree.
     const level = Math.max(captureOffset*Math.sin(THREE.MathUtils.degToRad(.5)),1e-8);
@@ -385,29 +396,117 @@ test("the guide frame stays fixed on the screen however the phone moves", async 
   memory.dispose();
 });
 
-test("with a deck, the arriving card flies in before the activation, which its landing starts", async () => {
+// A stack that records what the window asks of it and steps aside for
+// `depart` ms, and a flight that touches the photograph `duration` seconds
+// after its launch.
+function stackAndFlight(duration = 2, depart = 300) {
   const calls = [];
-  let land;
-  const cards = { update(state) { calls.push(["update",state.shown]); }, reset() { calls.push(["reset"]); },
-    fly() { calls.push(["fly"]); return new Promise(resolve => { land = resolve; }); }, dissolve() { calls.push(["dissolve"]); } };
-  const f = await fixture(undefined, { cards });
+  const pose = { x:700, y:330, width:84, height:98, border:4, rotation:86 };
+  const cards = { albumOpen:false, update(state) { calls.push(["update",state.shown]); }, reset() { calls.push(["reset"]); },
+    depart() { calls.push(["depart"]); this.departedAt = this.now; return depart; },
+    launch() { calls.push(["launch"]); return pose; } };
+  const flight = { mesh:new THREE.Group(), launched:null, settled:[],
+    launch(options) { calls.push(["fly"]); this.launched = options; },
+    update(now) {
+      if (!this.launched) return { state:"idle" };
+      const landedAt = this.launched.now+duration;
+      return now >= landedAt ? { state:"landed", landedAt } : { state:"flying" };
+    },
+    settle(frame) { this.settled.push(frame.seconds); },
+    reset() { calls.push(["flight reset"]); this.launched = null; },
+    dispose() {} };
+  return { calls, pose, cards, flight };
+}
+
+test("the match launches the arriving print from the stack, and its touch starts the activation", async () => {
+  const { calls, pose, cards, flight } = stackAndFlight();
+  const f = await fixture(undefined, { cards, flight });
   const { memory } = f;
   await memory.prepare(f.context);
+  assert.ok(f.matte.parent.children.includes(flight.mesh),"the print flies in the stage's space");
   const { camera, canvas } = phoneAt(f,new THREE.Vector3(.01,0,.02));
   let now = 60;
-  while (!calls.some(([name]) => name === "fly") && now < 62) memory.update(camera,canvas,now += .05);
-  assert.ok(calls.some(([name,shown]) => name === "update" && shown),"the deck is out while matching");
-  assert.equal(memory.phase,"dormant","the card is still flying");
+  while (!flight.launched && now < 62) { cards.now = now += .05; memory.update(camera,canvas,now); }
+  assert.ok(calls.some(([name,shown]) => name === "update" && shown),"the stack is out while matching");
+  // The print leaves only once the rest of the pile has stepped aside.
+  assert.ok(flight.launched.now-cards.departedAt >= .3-1e-9 && flight.launched.now-cards.departedAt < .35);
+  // The 3D print takes over from the stack's print where it lay on the screen.
+  assert.equal(flight.launched.pose,pose);
+  assert.equal(flight.launched.camera,camera);
+  assert.equal(flight.launched.layout,memory.layout);
+  assert.deepEqual(flight.launched.rect,canvas.getBoundingClientRect());
+  const launchedAt = flight.launched.now;
+  assert.equal(memory.phase,"dormant","the print is still flying");
   const held = memory.correction;
   for (let n = 0; n < 5; n++) memory.update(phoneAt(f,new THREE.Vector3(.08,.03,.1)).camera,canvas,now += .05);
   close(memory.correction.distanceTo(held),0);
   assert.equal(memory.match,null,"no hint while it flies");
-  land(); await new Promise(setImmediate);
-  assert.equal(memory.update(camera,canvas,now += .05).phase,"colorizing");
-  assert.deepEqual(calls.filter(([name]) => name !== "update").map(([name]) => name),["reset","fly","dissolve"]);
+  assert.deepEqual(flight.settled,[],"nothing to dissolve before it lands");
+  while (memory.phase === "dormant" && now < 66) memory.update(camera,canvas,now += .05);
+  assert.equal(memory.phase,"colorizing");
+  // The activation's clock starts at the touch, not at the frame that noticed it.
+  close(memory.frame.seconds,now-(launchedAt+2));
+  assert.ok(flight.settled.length > 0,"it sinks into the photograph as the colour comes");
+  assert.deepEqual(calls.filter(([name]) => name !== "update").map(([name]) => name),["reset","flight reset","depart","launch","fly"]);
   memory.reset();
-  assert.equal(calls.at(-1)[0],"reset");
+  assert.deepEqual(calls.slice(-2).map(([name]) => name),["reset","flight reset"]);
   memory.dispose();
+  assert.equal(flight.mesh.parent,null);
+});
+
+test("an activation that doesn't come from the print clears a print still in the air", async () => {
+  const { cards, flight } = stackAndFlight(5);
+  const f = await fixture(undefined, { cards, flight });
+  const { memory } = f;
+  await memory.prepare(f.context);
+  const { camera, canvas } = phoneAt(f,new THREE.Vector3());
+  let now = 70;
+  while (!flight.launched && now < 72) memory.update(camera,canvas,now += .05);
+  assert.ok(flight.launched);
+  assert.equal(memory.activate(now),true);
+  assert.equal(flight.launched,null);
+  memory.update(camera,canvas,now += .5);
+  assert.deepEqual(flight.settled,[],"no print to dissolve");
+  memory.dispose();
+});
+
+test("the match holds while the album is open, and resumes when it closes", async () => {
+  const { cards, flight } = stackAndFlight();
+  cards.albumOpen = true;
+  const f = await fixture(undefined, { cards, flight, hint:{ hidden:true, style:{}, classList:{ toggle() {} } } });
+  const { memory } = f;
+  await memory.prepare(f.context);
+  const { camera, canvas } = phoneAt(f,new THREE.Vector3(.02,0,.03));
+  let now = 80;
+  for (let n = 0; n < 40; n++) memory.update(camera,canvas,now += .05);
+  assert.equal(memory.match.aligned,true,"the view is still measured");
+  close(memory.correction.length(),0);
+  assert.equal(flight.launched,null);
+  cards.albumOpen = false;
+  while (!flight.launched && now < 84) memory.update(camera,canvas,now += .05);
+  assert.ok(flight.launched,"the print leaves once the album has closed");
+  memory.dispose();
+});
+
+test("the plate holder frames the photograph and follows the timeline", async () => {
+  const seen = { layouts:[], frames:[] };
+  const plate = { object:new THREE.Group(), layout(layout) { seen.layouts.push(layout.photoWidth); },
+    update(frame, settings) { seen.frames.push([frame.phase,settings.colorDuration]); }, dispose() { seen.disposed = true; } };
+  const f = await fixture(undefined, { plate });
+  const { memory } = f;
+  assert.ok(f.matte.parent.children.includes(plate.object));
+  assert.equal(seen.layouts.at(-1),memory.layout.photoWidth);
+  memory.setTuning({ matchFrame:.6 });
+  assert.equal(seen.layouts.at(-1),memory.layout.photoWidth);
+  await memory.prepare(f.context);
+  memory.activate(10);
+  memory.seek(memory.getSettings().colorDuration+.1);
+  assert.deepEqual(seen.frames.at(-1),["surface",memory.getSettings().colorDuration]);
+  memory.reset();
+  assert.equal(seen.frames.at(-1)[0],"dormant");
+  memory.dispose();
+  assert.ok(seen.disposed);
+  assert.equal(plate.object.parent,null);
 });
 
 test("the match waits for the phone to be sideways, steady and at the spot", async () => {

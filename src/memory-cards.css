@@ -1,0 +1,159 @@
+/* The pile of photographs in the corner of the screen as the phone is held,
+   and the album it opens. memory-cards.js sizes this layer to the screen as
+   held, turns it upright and places every print; this sheet draws them. */
+.memory-cards {
+  position: fixed;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+  color: #fff0d6;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Reads the page's safe-area insets for memory-cards.js. */
+.memory-cards__probe {
+  position: absolute;
+  visibility: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.memory-cards button { margin: 0; color: inherit; font: inherit; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.memory-cards button:focus { outline: none; }
+.memory-cards button:focus-visible { outline: 2px solid #fff0d6; outline-offset: 3px; }
+
+/* A print: the outer layer carries x and the inner y, so a flight can take
+   them on different curves for a soft arc; the lift layer rises mid-flight. */
+.memory-card, .memory-card__y, .memory-card__lift { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.memory-card__y { will-change: transform, opacity; }
+.memory-card__lift { transition: transform 120ms cubic-bezier(0.45, 0, 0.1, 1); }
+.memory-cards[data-pressed] .memory-card__lift { transform: scale(0.96); }
+.memory-card__print {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+  border: 4px solid #f1e9d8;
+  border-radius: 2px;
+  background: #f1e9d8;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28), 0 8px 22px rgb(0 0 0 / 0.32);
+  pointer-events: none;
+}
+/* Waiting alone to leave for the street, the print's shadow lifts away, so
+   the 3D card that takes its place, which casts none, matches it exactly. */
+.memory-card.is-departing .memory-card__print {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0), 0 8px 22px rgb(0 0 0 / 0);
+  transition: box-shadow 300ms cubic-bezier(0.45, 0, 0.1, 1);
+}
+.memory-card__print img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
+.memory-cards[data-album="open"] .memory-card__print { pointer-events: auto; }
+
+/* The pile is one button laid over its prints. */
+.memory-stack { position: absolute; left: 0; top: 0; z-index: 40; padding: 0; border: 0; border-radius: 12px; background: transparent; pointer-events: auto; }
+
+/* The album: a warm dark ground over the street, its header, and the story
+   beside a highlighted print. The ground takes taps while the album is up,
+   so none reach the AR view. */
+.memory-album__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgb(15 14 12 / 0.86);
+  -webkit-backdrop-filter: blur(16px) saturate(0.85);
+  backdrop-filter: blur(16px) saturate(0.85);
+  opacity: 0;
+  visibility: hidden;
+}
+.memory-cards[data-album] .memory-album__backdrop {
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 480ms cubic-bezier(0.45, 0, 0.1, 1) 380ms;
+}
+.memory-cards[data-album="open"] .memory-album__backdrop { opacity: 1; transition: opacity 420ms cubic-bezier(0.25, 0.8, 0.25, 1); }
+
+.memory-album__header {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 200ms cubic-bezier(0.45, 0, 0.1, 1), transform 200ms cubic-bezier(0.45, 0, 0.1, 1), visibility 0s linear 200ms;
+}
+.memory-cards[data-album="open"] .memory-album__header {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 480ms cubic-bezier(0.25, 0.8, 0.25, 1) 240ms, transform 480ms cubic-bezier(0.25, 0.8, 0.25, 1) 240ms, visibility 0s;
+}
+.memory-album__heading { min-width: 0; }
+.memory-album__title, .memory-album__subtitle { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.memory-album__title { font-size: 15px; line-height: 1.3; font-weight: 600; }
+.memory-album__subtitle { margin-top: 2px; color: #b4a88f; font-size: 12px; line-height: 1.3; }
+.memory-album__actions { display: flex; flex: none; gap: 8px; }
+.memory-album__button {
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid rgb(255 240 214 / 0.28);
+  border-radius: 999px;
+  background: rgb(255 240 214 / 0.06);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 500;
+}
+.memory-album__done { border-color: #d8b879; background: #d8b879; color: #1b1712; font-weight: 600; }
+/* Its place is kept while it is away, so the header holds still; upright,
+   where the header is narrow, it takes its place only while it shows. "Done"
+   never moves. */
+.memory-album__back {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 200ms cubic-bezier(0.45, 0, 0.1, 1), visibility 0s linear 200ms, display 0s linear 200ms;
+  transition-behavior: allow-discrete;
+}
+.memory-cards[data-portrait]:not([data-highlight]) .memory-album__back { display: none; }
+.memory-cards[data-highlight] .memory-album__back { opacity: 1; visibility: visible; transition: opacity 360ms cubic-bezier(0.25, 0.8, 0.25, 1) 300ms, visibility 0s, display 0s; }
+@starting-style { .memory-cards[data-highlight] .memory-album__back { opacity: 0; } }
+
+.memory-album__story {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 200ms cubic-bezier(0.45, 0, 0.1, 1), transform 200ms cubic-bezier(0.45, 0, 0.1, 1), visibility 0s linear 200ms;
+}
+/* The story arrives once its print is nearly in place. */
+.memory-cards[data-highlight] .memory-album__story {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 500ms cubic-bezier(0.25, 0.8, 0.25, 1) 520ms, transform 500ms cubic-bezier(0.25, 0.8, 0.25, 1) 520ms, visibility 0s;
+}
+.memory-album__name { font-size: 19px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+.memory-album__text { max-width: 34em; margin-top: 10px; }
+.memory-album__text p { margin: 0 0 10px; color: #d6cab3; font-size: 13px; line-height: 1.5; text-wrap: pretty; }
+
+/* The kit's Fly lift: a small rise mid-flight, gone before it lands. */
+@keyframes memory-card-lift {
+  30% { transform: scale(1.06); }
+  85%, 100% { transform: none; }
+}
+
+.memory-cards[data-instant] * { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .memory-cards * { transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important; }
+}

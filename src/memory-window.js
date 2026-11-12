@@ -43,7 +43,15 @@ function createGuide() {
   };
 }
 
-export async function createMemoryWindow({ anchor, splat, matte, config, hint, cards, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
+/**
+ * The memory as placed: the photograph waiting at the photographer's spot, the
+ * match that starts it, and the activation. `cards` is the stack of people's
+ * photographs and its album (memory-cards.js); `flight` flies the arriving
+ * person's print from the stack into the photograph (memory-flight.js);
+ * `plate` is the old plate holder framing the photograph (memory-plate.js).
+ * All three are optional.
+ */
+export async function createMemoryWindow({ anchor, splat, matte, config, hint, cards, flight, plate, settings = MEMORY_SETTINGS, onPhase = () => {} }) {
   const loader = new THREE.TextureLoader();
   const [texture, colorTexture] = await Promise.all([
     loader.loadAsync(settings.photoUrl), loader.loadAsync(settings.colorPhotoUrl),
@@ -119,6 +127,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
   photo.position.z = -layout.photoDistance;
   photo.renderOrder = 1;
   stage.add(photo);
+  // The photograph stands in its plate holder, and the arriving print flies
+  // through the stage's space into it.
+  if (plate) stage.add(plate.object);
+  if (flight) stage.add(flight.mesh);
   // The guide rides with the camera rather than the stage, so the match's
   // easing never moves it on screen.
   const guide = createGuide();
@@ -153,8 +165,14 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
   let lock = 0;
   let lastUpdate = null;
   let guideFrom = 0; // The guide's opacity when the activation started.
-  // The match is made and a card is flying into the frame; activation waits for it.
+  // The match is made and a print is flying into the photograph; activation
+  // waits for it. `departAt` is when the print leaves the stack: the rest of
+  // the pile steps aside first, so nothing on the page lies over the 3D print
+  // that takes its place. `carried` once its touch has started the
+  // activation, so it dissolves into the photograph as the colour comes.
   let arriving = false;
+  let departAt = null;
+  let carried = false;
   const held = new THREE.Vector3();
   let heldHeading = 0;
   const guidePosition = new THREE.Vector3();
@@ -176,20 +194,34 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
   const level = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
     new THREE.Vector3().crossVectors(groundUp, groundBack), groundUp, groundBack)).invert();
 
+  // The props' own textures, uploaded with the photographs' while preparing so
+  // the plate and the print don't stall the frame they first appear in.
+  function propTextures() {
+    const found = new Set();
+    for (const root of [plate?.object, flight?.mesh]) root?.traverse(object => {
+      for (const material of [object.material].flat()) {
+        if (material?.map) found.add(material.map);
+        for (const { value } of Object.values(material?.uniforms ?? {})) if (value?.isTexture) found.add(value);
+      }
+    });
+    return [...found];
+  }
+
   function refreshLayout() {
     Object.assign(layout, photographerLayout(settings, screen));
     photo.scale.set(layout.photoWidth/baseLayout.photoWidth, layout.photoHeight/baseLayout.photoHeight, 1);
     material.uniforms.photoSize.value.set(layout.photoWidth,layout.photoHeight);
     guide.layout(layout);
-    // The spot stands `walkDistance` ahead of the placement at the
-    // photographer's eye height, and the capture camera just behind it by the
-    // dolly's offset, so the street, scaled about that camera, keeps its
-    // ground on the floor.
+    plate?.layout(layout);
+    // The spot stands `walkDistance` ahead of the placement at the matching
+    // height, and the capture camera just behind it by the dolly's offset and
+    // below it by the lift, along the ground's up, so the street, scaled
+    // about that camera, keeps its ground on the floor.
     spot.position.set(0, floorY+layout.eyeHeight, -settings.walkDistance);
     spot.quaternion.copy(level);
     splat.pivot.quaternion.identity();
     splat.pivot.scale.setScalar(settings.sceneScale);
-    splat.root.position.set(0, 0, layout.captureOffset);
+    splat.root.position.set(0, 0, layout.captureOffset).addScaledVector(groundUp, -layout.captureLift);
   }
 
   // The camera's position and axes in `frame`, and whether the screen is wide.
@@ -217,6 +249,8 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     viewIn(spot, camera, canvas);
     if (!ready || !matching || phase !== "dormant" || startedAt !== null || frozenSeconds !== undefined || arriving) return;
     match = alignment(view, layout, settings.matchTolerance);
+    // The album covers the screen; the match holds where it was until it closes.
+    if (cards?.albumOpen) return;
     if (match.aligned) {
       held.copy(view.eye);
       heldHeading = heading(view.forward);
@@ -226,23 +260,21 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     stage.position.copy(held).multiplyScalar(pull);
     stage.quaternion.setFromAxisAngle(spotUp, heldHeading*pull);
     if (lock === 1 && match.aligned) {
-      if (cards) arrive();
-      else api.activate(now);
+      if (flight) arrive(now);
+      else {
+        cards?.launch();
+        api.activate(now);
+      }
     }
   }
 
-  // The memory holds where the match left it while the arriving card flies
-  // into the frame; its landing starts the activation, and it dissolves into
-  // the street as the colour comes.
-  function arrive() {
+  // The memory holds where the match left it while the rest of the pile steps
+  // aside; then `update` sends the arriving print into the photograph and
+  // starts the activation when it touches.
+  function arrive(now) {
     arriving = true;
     match = null;
-    cards.fly().then(() => {
-      if (!arriving) return;
-      // On the clock `update` runs on, as of its latest frame.
-      api.activate(lastUpdate ?? undefined);
-      cards.dissolve();
-    });
+    departAt = now+(cards?.depart?.() ?? 0)/1000;
   }
 
   // The guide frame and the instruction, upright and nearest the floor for
@@ -259,15 +291,15 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     }
     if (!hint && !cards) return;
     const rect = canvas.getBoundingClientRect();
-    // The deck is out while the viewer lines the photograph up, phone sideways.
+    // The pile is out while the viewer lines the photograph up, phone sideways.
     const dealt = Boolean(match?.landscape);
     cards?.update({ shown: dealt, turn, rect,
       frame: [layout.photoScale*layout.tanX/screen.tanLong, layout.photoScale*layout.tanY/screen.tanShort] });
     if (!hint) return;
-    const text = match?.hint ?? "";
+    const text = cards?.albumOpen ? "" : match?.hint ?? "";
     hint.hidden = !text;
     if (!text) { hintKey = ""; return; }
-    // Nearest the floor, or nearest the sky while the deck holds the bottom.
+    // Nearest the floor, or nearest the sky while the pile is out: the frame leaves thin margins.
     const side = cards && dealt ? 1 : -1, inset = side > 0 ? 19 : 56;
     const angle = THREE.MathUtils.degToRad(turn), sin = Math.round(Math.sin(angle)), cos = Math.round(Math.cos(angle));
     const reach = Math.abs(sin)*rect.width/2+Math.abs(cos)*rect.height/2-inset;
@@ -305,6 +337,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     updateSplats(frame, camera, opening);
     // The ripple finishes on the photograph's plane before spatial expansion.
     particles.update(frame,dpr,0,layout);
+    // The plate holder dissolves as the colour completes, before the street
+    // opens; the print that started it has already sunk into the photograph.
+    plate?.update(frame, settings);
+    if (carried) flight.settle(frame);
     if (phase !== frame.phase) {
       phase = frame.phase;
       onPhase(phase);
@@ -364,7 +400,7 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     prepare(context) {
       if (ready) return Promise.resolve();
       if (preparing) return preparing;
-      preparing = warmMemory({ ...context, anchor, textures:[texture,colorTexture],
+      preparing = warmMemory({ ...context, anchor, textures:[texture,colorTexture,...propTextures()],
         sample: (seconds,camera) => apply(seconds,camera),
         samples: [settings.colorDuration*0.35, settings.colorDuration+settings.flatHoldDuration+settings.depthDuration*0.5, memoryDuration(settings), settings.colorDuration*0.35],
       }).then(() => { ready = true; }).finally(() => { preparing = null; apply(null); });
@@ -401,6 +437,9 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
       frozenSeconds = undefined;
       startedAt = now;
       arriving = false;
+      departAt = null;
+      // Started some other way (the preview's tap), a print still in the air goes.
+      if (!carried) flight?.reset();
       guideFrom = guide.opacity;
       match = null;
       apply(0);
@@ -412,7 +451,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
       frozenSeconds = undefined;
       lock = 0;
       arriving = false;
+      departAt = null;
+      carried = false;
       cards?.reset();
+      flight?.reset();
       held.set(0, 0, 0);
       heldHeading = 0;
       stage.position.set(0, 0, 0);
@@ -428,6 +470,19 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     },
     update(camera, canvas, now = performance.now() / 1000) {
       matchViewer(camera, canvas, now);
+      if (arriving) {
+        if (departAt !== null && now >= departAt && camera) {
+          departAt = null;
+          // Where the print lies on the screen as it leaves, for the 3D print to take over.
+          flight.launch({ camera, rect: canvas.getBoundingClientRect(), pose: cards?.launch() ?? null, layout, now });
+        }
+        // The print touching the photograph starts the activation, timed from the touch.
+        const { state, landedAt } = flight.update(now);
+        if (state === "landed") {
+          carried = true;
+          if (!api.activate(landedAt)) carried = false;
+        }
+      }
       const seconds = frozenSeconds !== undefined ? frozenSeconds : startedAt === null ? null : now - startedAt;
       apply(seconds, camera, canvas.width/canvas.clientWidth);
       showGuidance(canvas);
@@ -444,6 +499,10 @@ export async function createMemoryWindow({ anchor, splat, matte, config, hint, c
     },
     dispose() {
       guide.dispose();
+      plate?.object.removeFromParent();
+      plate?.dispose();
+      flight?.mesh.removeFromParent();
+      flight?.dispose();
       photo.removeFromParent();
       photo.geometry.dispose();
       material.dispose();

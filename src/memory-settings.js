@@ -32,8 +32,10 @@ export const MEMORY_SETTINGS = Object.freeze({
   captureGroundUp: Object.freeze([-0.00991, -0.99995, 0.00159]),
   captureCameraHeight: 1.39,
   captureGroundStart: 2.97,
-  colorDuration: 2.7,
-  flatHoldDuration: 0.35,
+  // The colour spreads slowly enough to follow (it was 2.7 s), and the street
+  // holds flat while the plate holder around it dissolves before it opens.
+  colorDuration: 4.2,
+  flatHoldDuration: 0.8,
   depthDuration: 3.1,
   // The match cut. The viewer matches the photograph `walkDistance` ahead of
   // where the memory is placed; it floats `photoDistance` beyond that spot and,
@@ -47,14 +49,18 @@ export const MEMORY_SETTINGS = Object.freeze({
   // photograph, the portal and where the street begins all follow from these
   // and the scene's size; see src/photographer.js.
   walkDistance: 1,
+  // The phone at the match, and so the photograph's centre, this high above
+  // the floor: where most people hold a phone up to frame a view. The street
+  // stays on the floor whatever it is (see photographerLayout).
+  matchHeight: 1.55,
   photoDistance: 0.8,
   matchFrame: 0.8,
   dolly: 0.3,
   matchTolerance: 4,
   matchHold: 0.6,
-  // The street at 1.04 of its captured size, which keeps the photographer's
-  // eye, and so the phone at the match, 1.39 m x 1.04 = 1.445 m above the
-  // floor, as tuned on a phone with the earlier reconstruction at 0.85.
+  // The street at 1.04 of its captured size, which puts the photographer's
+  // eye 1.39 m x 1.04 = 1.445 m above the floor, the matching height first
+  // tuned on a phone with the earlier reconstruction at 0.85.
   sceneScale: 1.04,
   // The spill is a fan of light from the portal's sides: its full angle, and
   // the penumbra angle by which its edges blur wider with distance.
@@ -69,6 +75,7 @@ export const MEMORY_SETTINGS = Object.freeze({
 
 export const MEMORY_TUNING_PARAMETERS = Object.freeze([
   { key: "walkDistance", label: "Walk distance", min: 0, max: 4, step: 0.05, unit: "m", group: "Match" },
+  { key: "matchHeight", label: "Match height", min: 0.8, max: 2.2, step: 0.01, unit: "m", group: "Match" },
   { key: "photoDistance", label: "Image distance", min: 0.2, max: 3, step: 0.01, unit: "m", group: "Match" },
   { key: "matchFrame", label: "Match frame", min: 0.3, max: 1, step: 0.01, unit: "percent", group: "Match" },
   { key: "dolly", label: "Dolly zoom", min: 0, max: 1.5, step: 0.05, unit: "gain", group: "Match" },

@@ -16,16 +16,26 @@ function view(eye, [pitch, yaw, roll] = [0, 0, 0], wide = true) {
     forward: new THREE.Vector3(0, 0, -1).applyQuaternion(q) };
 }
 
-test("scene size alone sets the photographer's eye, the portal and the street", () => {
-  const exact = photographerLayout({ ...MEMORY_SETTINGS, dolly: 0 });
+test("scene size and the matching height set the photographer's eye, the portal and the street", () => {
+  const { captureCameraHeight, captureGroundStart, sceneScale } = MEMORY_SETTINGS;
+  // The viewer matches higher than the photographer stood, where most people
+  // hold a phone; the street sits that much lower than the spot.
+  const raised = photographerLayout(MEMORY_SETTINGS);
+  close(raised.eyeHeight, MEMORY_SETTINGS.matchHeight);
+  close(raised.eyeHeight, 1.55);
+  close(raised.captureLift, 1.55-captureCameraHeight*sceneScale);
+  assert.ok(raised.captureLift > 0.1 && raised.captureLift < 0.11);
+  // The portal still stands on the floor below the raised spot.
+  close(raised.portalScale*raised.tanY*raised.portalDistance, raised.eyeHeight);
+  // At the photographer's own height nothing is lifted: the cut is theirs exactly.
+  const own = { ...MEMORY_SETTINGS, dolly: 0, matchHeight: captureCameraHeight*sceneScale };
+  const exact = photographerLayout(own);
   const { tanX, tanY, eyeHeight, portalDistance, portalWidth, portalHeight, captureOffset, portalScale } = exact;
   // SHARP's assumed 30mm lens: a 60° by 46.8° frame.
   close(2*THREE.MathUtils.radToDeg(Math.atan(tanX)), 59.96, 0.01);
   close(2*THREE.MathUtils.radToDeg(Math.atan(tanY)), 46.79, 0.01);
-  const { captureCameraHeight, captureGroundStart, sceneScale } = MEMORY_SETTINGS;
   close(eyeHeight, captureCameraHeight*sceneScale);
-  // The matching height stays where it was tuned on a phone.
-  close(eyeHeight, 1.445, 0.002);
+  assert.equal(exact.captureLift, 0);
   // Without the dolly the portal fills the photographer's frame and its bottom edge rests on the floor.
   assert.equal(captureOffset, 0); assert.equal(portalScale, 1);
   close(portalHeight/2, portalDistance*tanY);
@@ -35,11 +45,17 @@ test("scene size alone sets the photographer's eye, the portal and the street", 
   // The street begins just in front of the portal, where the frame meets the ground.
   close(exact.sceneDistance, captureGroundStart*sceneScale-portalDistance);
   assert.ok(exact.sceneDistance < 0 && exact.sceneDistance > -0.4);
-  for (const sceneScale of [0.5, 1, 1.6]) {
-    const scaled = photographerLayout({ ...MEMORY_SETTINGS, sceneScale });
-    close(scaled.portalDistance/layout.portalDistance, sceneScale/MEMORY_SETTINGS.sceneScale);
-    close(scaled.captureOffset/layout.captureOffset, sceneScale/MEMORY_SETTINGS.sceneScale);
-    close(scaled.sceneDistance/layout.sceneDistance, sceneScale/MEMORY_SETTINGS.sceneScale);
+  // Matching at the photographer's height, everything scales with the scene.
+  const ownLayout = photographerLayout({ ...MEMORY_SETTINGS, matchHeight: captureCameraHeight*sceneScale });
+  for (const scale of [0.5, 1, 1.6]) {
+    const scaled = photographerLayout({ ...MEMORY_SETTINGS, sceneScale: scale, matchHeight: captureCameraHeight*scale });
+    close(scaled.portalDistance/ownLayout.portalDistance, scale/sceneScale);
+    close(scaled.captureOffset/ownLayout.captureOffset, scale/sceneScale);
+    close(scaled.sceneDistance/ownLayout.sceneDistance, scale/sceneScale);
+    // At a fixed matching height the portal stays put while the street scales.
+    const fixed = photographerLayout({ ...MEMORY_SETTINGS, sceneScale: scale });
+    close(fixed.portalDistance, layout.portalDistance);
+    close(fixed.captureLift, MEMORY_SETTINGS.matchHeight-captureCameraHeight*scale);
   }
   // The photograph always stays in front of the portal.
   const tiny = photographerLayout({ ...MEMORY_SETTINGS, sceneScale: 0.2, photoDistance: 3 });

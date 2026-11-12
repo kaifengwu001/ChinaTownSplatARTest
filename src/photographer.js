@@ -43,8 +43,15 @@ export function frameScale(share, { tanLong, tanShort }, tanX, tanY) {
 /**
  * Sizes and distances for the match cut, in the frame of the spot where the
  * viewer matches the photograph: looking down -z, `eyeHeight` above the floor,
- * with the capture camera `captureOffset` behind it. Scene size, the dolly and
- * the share of the screen the matched photograph covers fix all of them.
+ * with the capture camera `captureOffset` behind it and `captureLift` below
+ * it. Scene size, the matching height, the dolly and the share of the screen
+ * the matched photograph covers fix all of them.
+ *
+ * The viewer matches at a comfortable height rather than the photographer's
+ * own: the street drops inside the stage by the difference, so its ground
+ * stays on the floor. The flat photograph still matches pixel for pixel, as
+ * the flat splats keep their pixels; the street, seen from a little above
+ * where it was shot, settles that much lower as it opens.
  *
  * Distant things always appear at the photographer's angles, so a photograph
  * smaller than the photographer's frame must grow as it opens: it covers
@@ -61,20 +68,21 @@ export function photographerLayout(settings, screen = DEFAULT_SCREEN) {
   // principal point, so the frame is symmetric about the view axis.
   const tanX = 0.5/settings.captureFocalRatio;
   const tanY = tanX/settings.captureAspect;
-  const eyeHeight = settings.captureCameraHeight*settings.sceneScale;
+  const eyeHeight = settings.matchHeight;
+  const captureLift = eyeHeight-settings.captureCameraHeight*settings.sceneScale;
   const captureStreet = settings.captureGroundStart*settings.sceneScale;
   const captureOffset = Math.max(0, Math.min(settings.dolly*TAP_DOLLY*captureStreet, captureStreet-STREET_AHEAD));
   const subject = 3*captureStreet;
   const portalScale = subject/(subject-captureOffset);
-  // The capture camera was level, so the bottom of the portal's frame meets
-  // the floor here, and the portal stands on it.
+  // The capture camera was level, so the bottom of the portal's frame, seen
+  // from the spot, meets the floor here, and the portal stands on it.
   const portalDistance = eyeHeight/(portalScale*tanY);
   const photoScale = frameScale(settings.matchFrame, screen, tanX, tanY);
   // The aperture recedes from the photograph to the portal, never toward the viewer.
   const photoDistance = Math.min(settings.photoDistance, 0.95*portalDistance);
   const streetStart = captureStreet-captureOffset;
   return Object.freeze({
-    tanX, tanY, eyeHeight, captureOffset, photoScale, portalScale,
+    tanX, tanY, eyeHeight, captureLift, captureOffset, photoScale, portalScale,
     photoDistance, photoWidth: 2*photoScale*tanX*photoDistance, photoHeight: 2*photoScale*tanY*photoDistance,
     portalDistance, portalWidth: 2*portalScale*tanX*portalDistance, portalHeight: 2*eyeHeight,
     streetStart,
