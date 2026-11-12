@@ -30,7 +30,6 @@ From the moment the match locks to the open street takes about 11 s. The viewer 
 | Live test site | [chinatown-splat-plate.vercel.app](https://chinatown-splat-plate.vercel.app) (opens the AR page) |
 | iPhone test today | [Needle App Clip link](https://appclip.needle.tools/ar?url=https%3A%2F%2Fchinatown-splat-plate.vercel.app%2F) |
 | Technical notes | [`docs/WEBAR.md`](docs/WEBAR.md): the match geometry, timeline, splat mapping and spill in depth |
-| VPS research | [Union Station VPS Options](https://claude.ai/artifact/DvXtraAcntkjyn16oZHvei) (private; ask the repo owner for access) |
 
 ## How it is built
 
@@ -80,10 +79,9 @@ Host this web build inside our App Clip and feed it from native ARKit, as decide
 
 | | A: host the web build (recommended) | B: port to native |
 | --- | --- | --- |
-| What we build | An App Clip that runs ARKit (and later the VPS) natively, draws the camera feed, and shows the page in a transparent web view on top, fed pose, projection, floor and tracking each frame | The whole experience in Swift and Metal |
+| What we build | An App Clip that runs ARKit natively, draws the camera feed, and shows the page in a transparent web view on top, fed pose, projection, floor and tracking each frame | The whole experience in Swift and Metal |
 | What carries over | All of it: the page already runs behind two trackers through small bridges (WebXR in `src/ar/webxr-bridge.js`, 8th Wall in `src/ar/xr-bridge.js`); ours is a third | The pure math ports directly (`src/photographer.js`, `src/memory-timeline.js`, the flight path in `src/memory-flight.js`); the shaders and the splat deformation are rewritten |
 | Hardest part | Keeping the web view's pose in step with the camera image, frame by frame | The splat modifier (`src/memory-splat.js`): per-splat deformation of centres and covariances on the GPU. RealityKit draws no Gaussian splats; [`ios/`](ios) in the repo has an ARKit plus MetalSplatter experiment to start from |
-| VPS | Native, passed to the page as the anchor's pose | Native |
 | Starting points | [`ios/`](ios) (ARKit, camera feed in Metal) with a small bridge; HoloWeb's frame-sync approach (realitydeslab/holoweb-app, MIT, iOS 27 only) | [`ios/`](ios) |
 | Size | The binary stays small; the 6.4 MB of splats and the photographs load over the network | Assets inside the binary or downloaded |
 
@@ -106,9 +104,9 @@ The page needs a camera pose and projection every frame, the floor, a tap layer 
 | WebGL2 | Spark's splat renderer and the shaders | `src/splat-scene.js` |
 | HTTPS and camera permission | The page, about 7 MB of splats and photographs at the default budget | `scripts/prepare_vercel.mjs` |
 
-## Placing it at the site and driving it
+## Placing it and driving it
 
-Placement is the one seam the VPS replaces: today a tap places the memory relative to the phone; at Union Station the VPS pose places it. Everything after is one call per frame.
+One pose places the whole experience: the anchor's. Today a tap sets it from the phone; in our App Clip, our own placement sets it. Everything after is one call per frame.
 
 **Today, on a tap** (`place()` in `src/ar/main.js`):
 
@@ -123,7 +121,7 @@ anchor.visible = true;
 await memory.prime(renderContext);                    // maps the splats for this pose before the first frame
 ```
 
-**With the VPS**, set the anchor from the site instead of the phone. The anchor is the placement point, looking down its −z and kept level. The photographer's spot is `walkDistance` (1 m) ahead of it at `matchHeight` (1.55 m) above the floor, and the photograph 0.8 m beyond. So put the anchor 1 m behind the surveyed spot, turned the way the photographer faced, then run the same lines from `setScreen` on.
+**What the anchor means.** The anchor is the placement point, looking down its −z and kept level. The photographer's spot is `walkDistance` (1 m) ahead of it at `matchHeight` (1.55 m) above the floor, and the photograph 0.8 m beyond. Set its pose, then run the same lines from `setScreen` on.
 
 **Every frame**, before rendering:
 
@@ -203,7 +201,6 @@ This version was checked in the desktop preview and the WebXR emulator, but not 
 
 - [ ] Play this version on an iPhone: the plate holder, the album, the 3D glide and the 1.55 m matching height.
 - [ ] Build our App Clip's bridge: pose, projection, floor and tracking in step with the camera image.
-- [ ] Place by VPS at Union Station instead of by tap; confirm the photographer's surveyed spot and heading.
 - [ ] Confirm taps on the pile and album never also place the memory in our host (`beforexrselect`).
 - [ ] Check the pile clears the Dynamic Island and home indicator on real phones; safe areas were only simulated.
 - [ ] Replace the album's placeholder text, and confirm the photographs' titles and credits.
