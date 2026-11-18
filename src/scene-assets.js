@@ -1,6 +1,5 @@
 // The SHARP reconstruction of input/apalabassa-soohoo.webp, by splat budget;
-// pages select one with ?splats=full|50|25. Files live in public/ and are
-// Git-ignored.
+// pages select one with ?splats=full|50|25. Files live in public/, in Git.
 export const SPLAT_ASSETS = Object.freeze({
   full: "/apalabassa-soohoo.sog",
   50: "/apalabassa-soohoo_50.sog",

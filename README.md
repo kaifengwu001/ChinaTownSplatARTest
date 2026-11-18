@@ -2,7 +2,7 @@
 
 The Apalabassa St. memory is ready to bring into our App Clip. A viewer stands where the photographer stood in old Chinatown and lines the historical photograph up on their phone. Peter SooHoo's print glides into it, and the photograph turns to colour and opens into the restored street in 3D. Today it runs as a web page (three.js with Spark Gaussian splats) inside Needle's App Clip; this README is what you need to bring it into ours.
 
-To run it locally: `npm install`, put the three splat files in `public/` (see [Assets](#assets-and-how-to-rebuild-them)), then `npm run dev` and open `/memory.html?controls=1` for the desktop preview or `/ar.html` on a phone.
+To run it locally: `npm install`, then `npm run dev` and open `/memory.html?controls=1` for the desktop preview or `/ar.html` on a phone.
 
 ## What the viewer experiences
 
@@ -164,11 +164,12 @@ For debugging, the AR page also takes `?splats=full|50|25` (splat budget, 50 by 
 
 ## Assets and how to rebuild them
 
-Everything is in the repo except the splats, which are Git-ignored: ask the repo owner for them, or rebuild them. Vite bundles the photographs and the plate with hashed names; `npm run vercel:prepare` refuses to build without all three splat files.
+Everything the experience needs is in the repo, the splats included, plus the reconstruction they were cut from, so the street can be re-decimated without running SHARP again. Only the 8th Wall engine is not: `npm run xr:copy` (run by `npm run dev` and `npm run build`) copies it from its package. Vite bundles the photographs and the plate with hashed names; `npm run vercel:prepare` refuses to build without all three splat files.
 
 | Asset | Where | Size | Notes |
 | --- | --- | --- | --- |
-| The street as Gaussian splats, three budgets | `public/apalabassa-soohoo.sog`, `_50.sog`, `_25.sog` | 11.3, 6.4, 3.3 MB | Not in Git. 50% is the default |
+| The street as Gaussian splats, three budgets | `public/apalabassa-soohoo.sog`, `_50.sog`, `_25.sog` | 11.3, 6.4, 3.3 MB | What the app loads. 50% is the default |
+| SHARP reconstruction | `output/apalabassa-soohoo/apalabassa-soohoo.ply`, `decimated/_50.ply`, `decimated/_25.ply`; its input `output/sharp-input/apalabassa-soohoo.png` | 66, 33, 16.5 MB; 2.4 MB | The splats' source: steps 3 to 5 below rebuild from these |
 | Historical photograph | [`input/apalabassa-original.jpg`](input/apalabassa-original.jpg) | 2000 × 1557, 0.5 MB | The black-and-white original, unmodified |
 | Restored colour photograph, with Peter in the street | [`input/apalabassa-soohoo.webp`](input/apalabassa-soohoo.webp) | 1448 × 1086, 0.43 MB | Source of the reconstruction and of the colour |
 | Plate holder | [`input/plate/photo-plate.glb`](input/plate/photo-plate.glb) | 279 KB | The holder only, cut from a Tripo model |

@@ -1,7 +1,10 @@
 node_modules/
 .venv/
-output/
-public/*.sog
+# Reconstruction intermediates stay local, except the current scene's, which
+# the street is rebuilt from (see the README's Assets section).
+output/*
+!output/apalabassa-soohoo/
+!output/sharp-input/
 vendor-ml-sharp/
 ios/ParallaxWindow.xcodeproj/
 ios/*.xcworkspace/

@@ -122,11 +122,11 @@ Flattening every splat onto exactly the same depth destroys its foreground/backg
 
 ## Build and delivery
 
-`npm run build` produces `dist/`, including the AR page, both previews, original photograph, and unmodified 8th Wall engine. SOG files under `public/` are currently ignored by Git. This feature uses the existing SOG assets; it does not regenerate them.
+`npm run build` produces `dist/`, including the AR page, both previews, original photograph, and unmodified 8th Wall engine. The SOG files under `public/` are in Git, as is the SHARP reconstruction they come from (`output/apalabassa-soohoo/`); other scenes' outputs stay local. This feature uses the existing SOG assets; it does not regenerate them.
 
 The production project is `chinatown-splat-ar`, served at `https://chinatown-splat-ar.vercel.app`. Its root opens AR with the chosen defaults and a dormant photograph; the tuning URL's `t=0.86` inspection frame is not a playback default. `/ar.html` is also available directly.
 
-For a complete release, link the existing project with `vercel link --yes --project chinatown-splat-ar`, run `npm run vercel:prepare`, then `vercel deploy --prebuilt --prod`. The preparation script verifies all three local SOGs before building, copies only `dist/` into Vercel's static Build Output API structure, and routes `/` to `/ar.html`. This includes Git-ignored scene/engine assets without uploading source folders, local credentials, or development captures. A source-only/Git rebuild must supply the SOG assets separately. The packaged engine keeps its resources and license intact.
+For a complete release, link the existing project with `vercel link --yes --project chinatown-splat-ar`, run `npm run vercel:prepare`, then `vercel deploy --prebuilt --prod`. The preparation script verifies all three local SOGs before building, copies only `dist/` into Vercel's static Build Output API structure, and routes `/` to `/ar.html`. This includes the scene and the 8th Wall engine without uploading source folders, local credentials, or development captures. A fresh clone has everything but the engine, which `npm run xr:copy` restores from its package. The packaged engine keeps its resources and license intact.
 
 Desktop browser verification covers the shader compilation, all activation stages, tap hit testing, sideways viewing, reset/replay, and a 390×844 viewport. Actual mobile camera tracking, Safari rendering, and frame rate require a device check. Existing GitHub and Vercel terminal sessions are used for sync and publication; only an expired or missing login needs user interaction.
 
