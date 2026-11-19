@@ -56,7 +56,7 @@ export const MEMORY_SETTINGS = Object.freeze({
   photoDistance: 0.8,
   matchFrame: 0.8,
   dolly: 0.3,
-  matchTolerance: 5.2,
+  matchTolerance: 7.2,
   matchHold: 0.6,
   // The street at 1.04 of its captured size, which puts the photographer's
   // eye 1.39 m x 1.04 = 1.445 m above the floor, the matching height first
