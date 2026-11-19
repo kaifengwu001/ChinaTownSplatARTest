@@ -10,7 +10,7 @@ From the moment the match locks to the open street takes about 11 s. The viewer 
 
 1. **Place.** A tap places the memory relative to the phone. An old wooden plate holder holding the black-and-white photograph (0.49 × 0.37 m) floats 1.8 m ahead at 1.55 m above the floor.
 2. **Turn sideways.** A viewfinder frame appears, fixed on the screen, with a one-line hint naming what to fix. A pile of eight photographs of people who lived there deals into the bottom-right corner; tapping it opens an album (a grid, and each print's story beside it when tapped).
-3. **Match.** The viewer walks 1 m up to the photographer's spot and lines the photograph up in the frame: corners within 4°, phone level. Holding that for 0.6 s eases the memory onto the phone so the cut lands exactly.
+3. **Match.** The viewer walks 1 m up to the photographer's spot and lines the photograph up in the frame: corners within 5.2°, phone level. Holding that for 0.6 s eases the memory onto the phone so the cut lands exactly.
 4. **Peter arrives (2.8 s).** The rest of the pile steps aside (0.36 s). Peter SooHoo's print then leaves the corner as a 3D card and glides into the photograph on one tilted curve (2.4 s), its shadow gathering on the photograph. Its touch starts the colour.
 5. **Colour (4.2 s).** Colour ripples out from where he stands and the print dissolves into the man in the street. From 3.4 s the plate holder dissolves outward, with a thin cream edge.
 6. **Hold (0.8 s).** The restored photograph stays flat while the last of the holder goes.
@@ -151,7 +151,7 @@ The defaults below were tuned on a phone; they live in [`src/memory-settings.js`
 | `walkDistance` | 1 m | From the placement point to the photographer's spot |
 | `photoDistance` | 0.8 m | From the spot to the photograph |
 | `matchFrame` | 0.8 | Share of the sideways screen's height the matched photograph fills |
-| `matchTolerance` | 4° | How close the corners and the phone's level must be |
+| `matchTolerance` | 5.2° | How close the corners and the phone's level must be |
 | `matchHold` | 0.6 s | How long the match must hold |
 | `dolly` | 0.3 | Dolly zoom as the window opens; 0 is the photographer's exact view |
 | `sceneScale` | 1.04 | Size of the street against the reconstruction, which is about metric |

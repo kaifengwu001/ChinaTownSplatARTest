@@ -56,7 +56,7 @@ export const MEMORY_SETTINGS = Object.freeze({
   photoDistance: 0.8,
   matchFrame: 0.8,
   dolly: 0.3,
-  matchTolerance: 4,
+  matchTolerance: 5.2,
   matchHold: 0.6,
   // The street at 1.04 of its captured size, which puts the photographer's
   // eye 1.39 m x 1.04 = 1.445 m above the floor, the matching height first
@@ -79,7 +79,7 @@ export const MEMORY_TUNING_PARAMETERS = Object.freeze([
   { key: "photoDistance", label: "Image distance", min: 0.2, max: 3, step: 0.01, unit: "m", group: "Match" },
   { key: "matchFrame", label: "Match frame", min: 0.3, max: 1, step: 0.01, unit: "percent", group: "Match" },
   { key: "dolly", label: "Dolly zoom", min: 0, max: 1.5, step: 0.05, unit: "gain", group: "Match" },
-  { key: "matchTolerance", label: "Match tolerance", min: 0.5, max: 15, step: 0.5, unit: "deg", group: "Match" },
+  { key: "matchTolerance", label: "Match tolerance", min: 0.5, max: 15, step: 0.1, unit: "deg", group: "Match" },
   { key: "matchHold", label: "Match hold", min: 0, max: 3, step: 0.05, unit: "s", group: "Match" },
   { key: "sceneScale", label: "Scene size", min: 0.2, max: 3, step: 0.01, unit: "gain", group: "Scene" },
   { key: "spillStrength", label: "Ground spill", min: 0, max: 8, step: 0.05, unit: "gain", group: "Scene" },
